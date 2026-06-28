@@ -1,0 +1,187 @@
+/* ============================================================
+   Ananta — Design System "Calm Ledger"
+   Tailwind CSS v4 · token semantik + dark mode scaffold
+   Drop ke: apps/web/app/globals.css
+   ============================================================ */
+
+@import "tailwindcss";
+
+/* Dark mode dikendalikan lewat class .dark (toggle), bukan media query,
+   supaya user bisa override. prefers-color-scheme tetap dihormati di layout. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------- Token mentah (light) ---------- */
+:root {
+  /* Permukaan */
+  --canvas:          #F6F8F6;
+  --surface:         #FFFFFF;
+  --surface-sunken:  #EEF1EE;
+
+  /* Teks */
+  --ink:             #1B2A26;
+  --ink-muted:       #5C6B65;
+  --ink-subtle:      #8A958F;
+
+  /* Garis */
+  --line:            #E4E8E4;
+
+  /* Brand */
+  --primary:         #2F6F5E;
+  --primary-hover:   #265B4D;
+  --primary-soft:    #E3EFEA;
+
+  /* Aksen — HEMAT, hanya sorotan kecil */
+  --accent:          #E2A33C;
+
+  /* Status */
+  --success:         #2E9E6B;
+  --danger:          #C9514C;
+  --warning:         #D8923A;
+  --info:            #3E7CA8;
+
+  /* Fokus keyboard */
+  --ring:            #2F6F5E;
+
+  /* Shadow halus — hanya elemen mengambang */
+  --shadow-pop: 0 1px 2px rgba(27, 42, 38, .06),
+                0 4px 12px rgba(27, 42, 38, .05);
+}
+
+/* ---------- Override dark (scaffold, siap dinyalakan) ---------- */
+.dark {
+  --canvas:          #0F1614;
+  --surface:         #161E1B;
+  --surface-sunken:  #1C2622;
+
+  --ink:             #E8EDEA;
+  --ink-muted:       #9DA9A3;
+  --ink-subtle:      #6E7A74;
+
+  --line:            #2A332F;
+
+  --primary:         #4A9582;   /* dinaikkan terangnya agar kontras di latar gelap */
+  --primary-hover:   #58A893;
+  --primary-soft:    #1C2E29;
+
+  --accent:          #E2A33C;
+
+  --success:         #3FB17E;
+  --danger:          #D96A65;
+  --warning:         #E0A24F;
+  --info:            #5A95BE;
+
+  --ring:            #4A9582;
+
+  --shadow-pop: 0 1px 2px rgba(0, 0, 0, .35),
+                0 4px 14px rgba(0, 0, 0, .30);
+}
+
+/* ---------- Map ke theme Tailwind (inline → ikut dark override) ---------- */
+@theme inline {
+  --color-canvas:         var(--canvas);
+  --color-surface:        var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+
+  --color-ink:            var(--ink);
+  --color-ink-muted:      var(--ink-muted);
+  --color-ink-subtle:     var(--ink-subtle);
+
+  --color-line:           var(--line);
+
+  --color-primary:        var(--primary);
+  --color-primary-hover:  var(--primary-hover);
+  --color-primary-soft:   var(--primary-soft);
+
+  --color-accent:         var(--accent);
+  --color-success:        var(--success);
+  --color-danger:         var(--danger);
+  --color-warning:        var(--warning);
+  --color-info:           var(--info);
+
+  /* Tipografi — dimuat via next/font, var di-set di <html> */
+  --font-display: var(--font-hanken), "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans:    var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+
+  /* Radius — konsisten, jangan dicampur */
+  --radius-badge:  8px;
+  --radius-input:  10px;
+  --radius-button: 10px;
+  --radius-card:   12px;
+
+  /* Skala tipe (desktop) */
+  --text-display:   2rem;     /* 32 */
+  --text-display--line-height: 2.5rem;   /* 40 */
+  --text-h1:        1.5rem;   /* 24 */
+  --text-h1--line-height: 2rem;          /* 32 */
+  --text-h2:        1.25rem;  /* 20 */
+  --text-h2--line-height: 1.75rem;       /* 28 */
+  --text-h3:        1rem;     /* 16 */
+  --text-h3--line-height: 1.5rem;        /* 24 */
+  --text-body:      0.875rem; /* 14 */
+  --text-body--line-height: 1.375rem;    /* 22 */
+  --text-caption:   0.75rem;  /* 12 */
+  --text-caption--line-height: 1.125rem; /* 18 */
+
+  --shadow-pop: var(--shadow-pop);
+}
+
+/* ---------- Dasar ---------- */
+@layer base {
+  html {
+    background-color: var(--canvas);
+    color: var(--ink);
+    /* Angka kolom keuangan selalu sejajar */
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* Fokus keyboard terlihat (WCAG AA) */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Hormati preferensi gerak */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ---------- Utility: angka finansial ---------- */
+@layer utilities {
+  /* Nilai uang besar / KPI — mono tabular agar digit presisi */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+  /* Nilai negatif */
+  .num-neg { color: var(--danger); }
+  .num-pos { color: var(--success); }
+
+  /* Continuity ribbon — signature element, dipakai sangat subtil */
+  .ribbon {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--primary) 18%, transparent) 50%,
+      transparent 100%
+    );
+  }
+}
