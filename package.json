@@ -1,6 +1,7 @@
 {
   "name": "ananta",
   "private": true,
+  "packageManager": "npm@10.9.2",
   "workspaces": ["apps/web", "packages/*"],
   "scripts": {
     "dev:web": "npm --workspace apps/web run dev",
