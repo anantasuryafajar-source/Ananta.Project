@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from sqlalchemy import DateTime, Numeric, func
+from sqlalchemy import DateTime, Numeric, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -14,7 +14,11 @@ def utcnow() -> datetime:
 
 
 class Base(DeclarativeBase):
-    pass
+    # Semua `Mapped[str]` polos (PK id & semua FK ke *.id berupa UUID) dipetakan
+    # ke VARCHAR(36) agar tipe kolom PK dan FK SAMA PERSIS. Tanpa ini, PostgreSQL
+    # menolak FK ("foreign key constraint cannot be implemented").
+    # Kolom dengan String(n) eksplisit atau Text TIDAK terpengaruh.
+    type_annotation_map = {str: String(36)}
 
 
 # Tipe uang seragam: Numeric(18,2). JANGAN pakai float untuk nilai uang.
