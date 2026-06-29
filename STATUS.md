@@ -1,34 +1,41 @@
-# Status implementasi
+# Status implementasi — disesuaikan untuk PT ASF
 
-## ✅ Sudah jalan (end-to-end siap setelah install)
-- **Fondasi:** monorepo, design tokens "Calm Ledger" (Tailwind v4 + dark scaffold),
-  app-shell (sidebar, topbar, signature continuity-ribbon), font lokal next/font.
-- **Auth & RBAC:** login (JWT access+refresh, Argon2), `/auth/me`, `require_roles`
-  dicek di backend. Peran: owner/finance/sales/warehouse/viewer.
-- **Master data (API):** Kontak (list+create), Produk (list+create), CoA (list).
-- **Akuntansi inti:**
-  - `services/journal.py` — posting jurnal dengan invarian **debit=kredit** (ditest).
-  - `services/numbering.py` — penomoran dokumen otomatis + reset periode (row-lock).
-  - `services/invoice_service.py` — **terbit faktur → jurnal otomatis (Piutang/
-    Pendapatan/PPN Keluaran + HPP/Persediaan) → potong stok**, atomik dalam satu
-    transaksi DB. Ditest (balance + stok berkurang).
-- **Dashboard:** ringkasan pendapatan bulan ini + total piutang (API + UI).
-- **Seed:** CoA standar Indonesia, 5 peran, gudang default, user admin.
-- **Test:** `test_journal_balance.py`, `test_invoice_posting.py`.
+## ✅ Sudah jalan (end-to-end)
+- **Fondasi:** monorepo Next.js + FastAPI, design tokens "Calm Ledger", app-shell.
+- **Auth & RBAC:** login JWT (Argon2), peran owner/finance/sales/warehouse/viewer,
+  `require_roles` dicek di backend.
+- **Master data ASF (seed dari Excel):** `app/seed_asf.py`
+  - CoA disesuaikan ke akun riil ASF (Beban Ekspedisi, Komisi, Investor, Entertainment,
+    Perawatan Kendaraan, **Piutang Tidak Tertagih**, dll) + akun bank Silo.
+  - 18 produk dengan modal & harga jual nyata (dari sheet KOMISI).
+  - 54 customer hasil ekstraksi dari sheet penjualan; supplier contoh.
+- **Akuntansi inti (jurnal = sumber kebenaran tunggal):**
+  - `services/journal.py` — invarian **debit=kredit** (ditest).
+  - `services/invoice_service.py` — **penjualan -> jurnal (Piutang/Pendapatan/PPN +
+    HPP/Persediaan) -> potong stok**, atomik.
+  - `services/purchase_service.py` — **pembelian/pengadaan -> jurnal (Persediaan/PPN
+    Masukan/Utang) -> stok MASUK + update average cost**, atomik. *(modul baru)*
+  - `services/payment_service.py` — pelunasan piutang (terima) & utang (bayar) -> jurnal. *(baru)*
+- **Laporan (diturunkan dari jurnal):** `services/reports.py` *(baru)*
+  - Laba Rugi, Neraca, Neraca Saldo, **AR Aging** (bucket umur), Valuasi Stok.
+  - Endpoint: `/api/v1/reports/{profit-loss,balance-sheet,trial-balance,ar-aging,stock-valuation}`.
+- **Dashboard:** pendapatan, piutang, **utang, nilai persediaan**.
+- **Frontend:** halaman Dashboard, Penjualan, Pembelian, Produk & Stok, Kontak,
+  **Laporan** (Laba Rugi + grafik, AR Aging, Valuasi Stok), + stub Kas & Bank/Akuntansi/Pengaturan.
+- **Test:** `test_journal_balance.py`, `test_invoice_posting.py`, **`test_bill_posting.py`** (average cost).
 
-## 🟡 Scaffold / pola sudah ada, tinggal dilanjutkan
-- Penjualan: Penawaran → SO (model invoice sudah ada; tambah quotation/SO + konversi).
-- Pembelian: PO → Bill → Pembayaran + HPP masuk (cermin dari invoice_service).
-- Kas & Bank, rekonsiliasi, transfer dana.
-- Buku Besar, Neraca Saldo, jurnal penyesuaian, tutup buku.
-- Laporan (Laba Rugi/Neraca/Arus Kas) + ekspor PDF/Excel/CSV.
-- Pajak lanjutan (PPh, ringkasan PPN, struktur e-Faktur/Coretax).
-- Stok opname, multi-gudang transfer, FIFO (sekarang Average jalan).
-- Command palette (Ctrl/Cmd+K), dark-mode toggle, audit log UI, TanStack Query/Table.
+## 🟡 Lanjutan (pola sudah ada)
+- Form input penjualan/pembelian di UI (API sudah jalan, tinggal sambungkan form).
+- Modul khas ASF: komisi per-sales per-SKU, bagi hasil investor & dividen (Silo/Abay/Fei/Ido).
+- Migrasi saldo awal & data historis 2 tahun dari `ASF_MASTER_DATA.xlsx`.
+- Ekspor laporan PDF/Excel, jurnal penyesuaian, tutup buku, multi-gudang transfer, FIFO.
+- e-Faktur/Coretax, ringkasan PPN/PPh.
 
-## Cara melanjutkan tiap modul
-Pola "transaksi → jurnal otomatis + mutasi" sudah dicontohkan penuh di
-`invoice_service.py`. Modul Pembelian/Pembayaran mengikuti pola yang sama:
-hitung total → `post_journal()` dengan baris debit/kredit yang sesuai → update
-stok/saldo → `commit()` (rollback bila gagal). Tambah router + schema serupa
-contoh yang ada.
+## Cara melanjutkan
+Pola "transaksi -> jurnal otomatis + mutasi" dicontohkan penuh di
+`invoice_service.py` (keluar) dan `purchase_service.py` (masuk). Modul baru tinggal
+mengikuti: hitung total -> `post_journal()` -> update stok/saldo -> `commit()` (rollback bila gagal).
+
+## Jalankan
+Backend: `python -m app.seed_asf` (seed PT ASF) lalu `uvicorn app.main:app --reload`.
+Frontend: `npm install && npm run dev`. Login: admin@ananta.local / admin12345.

@@ -10,7 +10,10 @@ DEFAULT_CODES = {
     "cogs": "5-1000",        # Harga Pokok Penjualan
     "sales": "4-1000",       # Pendapatan Penjualan
     "vat_out": "2-1300",     # PPN Keluaran (utang)
+    "vat_in": "1-1300",      # PPN Masukan (aset)
     "cash": "1-1000",        # Kas
+    "bank": "1-1100",        # Bank
+    "ap": "2-1000",          # Utang Usaha
 }
 
 

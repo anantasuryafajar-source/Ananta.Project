@@ -2,7 +2,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
-from .routers import auth, contacts, products, accounts, invoices, dashboard
+from .routers import (
+    auth, contacts, products, accounts, invoices, dashboard,
+    purchases, payments, reports,
+)
 
 
 @asynccontextmanager
@@ -29,7 +32,8 @@ app.add_middleware(
 )
 
 API = "/api/v1"
-for r in (auth, contacts, products, accounts, invoices, dashboard):
+for r in (auth, contacts, products, accounts, invoices, dashboard,
+          purchases, payments, reports):
     app.include_router(r.router, prefix=API)
 
 

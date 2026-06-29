@@ -8,6 +8,7 @@ from .product import (
 )
 from .journal import Journal, JournalEntry
 from .invoice import Invoice, InvoiceLine, PaymentReceived
+from .purchase import Bill, BillLine, PaymentMade
 from .sequence import DocumentSequence
 from .audit import AuditLog
 
@@ -15,5 +16,6 @@ __all__ = [
     "Base", "Company", "Warehouse", "User", "Role", "UserRole",
     "Account", "Contact", "ProductCategory", "Product", "StockLevel",
     "StockMovement", "Journal", "JournalEntry", "Invoice", "InvoiceLine",
-    "PaymentReceived", "DocumentSequence", "AuditLog",
+    "PaymentReceived", "Bill", "BillLine", "PaymentMade",
+    "DocumentSequence", "AuditLog",
 ]

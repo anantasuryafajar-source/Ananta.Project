@@ -33,7 +33,7 @@ cd backend
 python -m venv .venv && .venv\Scripts\Activate.ps1   # Windows
 pip install uv
 uv pip install -r pyproject.toml --group dev
-python -m app.seed   # buat tabel + CoA Indonesia + admin
+python -m app.seed_asf   # buat tabel + CoA ASF + 18 produk + 54 customer + admin
 uvicorn app.main:app --reload   # http://localhost:8000  · /docs
 ```
 Login awal: `admin@ananta.local` / `admin12345`.

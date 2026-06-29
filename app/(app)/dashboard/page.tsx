@@ -6,7 +6,10 @@ import { Topbar } from "@/components/ananta/topbar";
 import { KpiCard } from "@/components/ananta/kpi-card";
 import { Card } from "@/components/ui/card";
 
-type Summary = { revenue_month: string; receivable_total: string; period: string };
+type Summary = {
+  revenue_month: string; receivable_total: string;
+  payable_total: string; stock_value: string; period: string;
+};
 
 export default function DashboardPage() {
   const [data, setData] = useState<Summary | null>(null);
@@ -39,10 +42,11 @@ export default function DashboardPage() {
 
         {data && (
           <>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <KpiCard label="Pendapatan bulan ini" value={rupiah(data.revenue_month)} hint={`Sejak ${tanggal(data.period)}`} />
               <KpiCard label="Total piutang" value={rupiah(data.receivable_total)} />
-              <KpiCard label="Saldo kas & bank" value={rupiah(0)} hint="Hubungkan modul Kas & Bank" />
+              <KpiCard label="Total utang" value={rupiah(data.payable_total)} />
+              <KpiCard label="Nilai persediaan" value={rupiah(data.stock_value)} hint="Qty × average cost" />
             </div>
             <Card className="mt-6">
               <p className="text-h3 font-semibold text-ink">Arus kas</p>
