@@ -38,6 +38,8 @@ class InvoiceLine(Base, PKMixin):
     tax_rate: Mapped[object] = mapped_column(Money, default=0)  # persen, mis. 11
     line_total: Mapped[object] = mapped_column(Money, default=0)
 
+    invoice: Mapped["Invoice"] = relationship(back_populates="lines")
+
 
 class PaymentReceived(Base, PKMixin, TimestampMixin):
     __tablename__ = "payments_received"
