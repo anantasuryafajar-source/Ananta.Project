@@ -28,7 +28,10 @@ ZERO = Decimal("0.00")
 
 
 class PKMixin:
-    id: Mapped[str] = mapped_column(primary_key=True, default=_uuid)
+    # Tipe String(36) EKSPLISIT (bukan via annotation map) agar PK selalu
+    # VARCHAR(36) dan cocok dengan kolom FK. Tipe eksplisit tidak terpengaruh
+    # urutan resolusi mixin yang bisa membuat PK ter-render jadi `uuid`.
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
 
 
 class TimestampMixin:
