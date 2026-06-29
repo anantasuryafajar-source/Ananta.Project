@@ -1,12 +1,20 @@
 #!/usr/bin/env sh
 set -e
 
-echo "[entrypoint] Menyiapkan database (seed idempoten)..."
-python -m app.seed_asf || echo "[entrypoint] Seed dilewati (data sudah ada / non-fatal)."
+PORT="${PORT:-8000}"
 
-echo "[entrypoint] Menjalankan server di port ${PORT:-8000}..."
+# Seed jalan di BACKGROUND supaya TIDAK memblokir start server.
+# /health bisa langsung menjawab walau seed masih berjalan / DB lambat.
+echo "[entrypoint] Menjalankan seed di background (non-blocking)..."
+(
+  python -m app.seed_asf \
+    && echo "[entrypoint] Seed selesai." \
+    || echo "[entrypoint] Seed gagal/dilewati — server tetap jalan, cek koneksi DB."
+) &
+
+echo "[entrypoint] Start server di port ${PORT}..."
 exec gunicorn app.main:app \
   -k uvicorn.workers.UvicornWorker \
-  -b 0.0.0.0:${PORT:-8000} \
-  --workers ${WEB_CONCURRENCY:-2} \
+  -b 0.0.0.0:"${PORT}" \
+  --workers "${WEB_CONCURRENCY:-2}" \
   --timeout 120

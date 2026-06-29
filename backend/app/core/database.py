@@ -50,6 +50,7 @@ if _tx_pooler:
             "prepared_statement_cache_size": 0,
             "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
             "server_settings": {"jit": "off"},
+            "timeout": 10,  # gagal cepat bila DB tak terjangkau
         },
     )
 else:
@@ -60,6 +61,7 @@ else:
         pool_pre_ping=True,
         pool_size=10,
         max_overflow=20,
+        connect_args={"timeout": 10},  # gagal cepat bila DB tak terjangkau
     )
 
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
