@@ -29,11 +29,12 @@ export default function LaporanPage() {
   const [start, setStart] = useState(yearStart());
   const [end, setEnd] = useState(today());
   const [data, setData] = useState<any>(null);
+  const [dataTab, setDataTab] = useState<Tab | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    setErr(null); setLoading(true); setData(null);
+    setErr(null); setLoading(true); setData(null); setDataTab(null);
     try {
       const url: Record<Tab, string> = {
         "Laba Rugi": `/reports/profit-loss?start=${start}&end=${end}`,
@@ -45,6 +46,7 @@ export default function LaporanPage() {
         "Valuasi Stok": `/reports/stock-valuation`,
       };
       setData(await api<any>(url[tab]));
+      setDataTab(tab);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Gagal memuat laporan.");
     } finally { setLoading(false); }
@@ -76,13 +78,13 @@ export default function LaporanPage() {
         {err && <Card className="text-sm text-danger">{err}</Card>}
         {loading && <Card className="text-sm text-ink-muted">Memuat…</Card>}
 
-        {!loading && data && tab === "Laba Rugi" && <ProfitLoss pl={data as PL} />}
-        {!loading && data && tab === "Arus Kas" && <CashflowView cf={data as Cashflow} />}
-        {!loading && data && tab === "Rekap Kuartal" && <QuarterlyView q={data as Quarterly} />}
-        {!loading && data && tab === "AR Aging" && <ArAging aging={data as Aging} />}
-        {!loading && data && tab === "AR Limit" && <ArLimitView a={data as ArLimit} />}
-        {!loading && data && tab === "Komisi" && <CommissionView c={data as Commission} />}
-        {!loading && data && tab === "Valuasi Stok" && <StockVal stock={data as Stock} />}
+        {!loading && data && dataTab === tab && tab === "Laba Rugi" && <ProfitLoss pl={data as PL} />}
+        {!loading && data && dataTab === tab && tab === "Arus Kas" && <CashflowView cf={data as Cashflow} />}
+        {!loading && data && dataTab === tab && tab === "Rekap Kuartal" && <QuarterlyView q={data as Quarterly} />}
+        {!loading && data && dataTab === tab && tab === "AR Aging" && <ArAging aging={data as Aging} />}
+        {!loading && data && dataTab === tab && tab === "AR Limit" && <ArLimitView a={data as ArLimit} />}
+        {!loading && data && dataTab === tab && tab === "Komisi" && <CommissionView c={data as Commission} />}
+        {!loading && data && dataTab === tab && tab === "Valuasi Stok" && <StockVal stock={data as Stock} />}
       </div>
     </>
   );
