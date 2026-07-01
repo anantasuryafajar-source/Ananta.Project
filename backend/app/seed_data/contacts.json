@@ -1,0 +1,632 @@
+[
+  {
+    "type": "customer",
+    "name": "ABAY",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "AGUNG",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "AGUS MALANG",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "ALDI",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "ANDRE",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "ATAL",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "BANG ADE",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "BAPAK MANGATUR",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "BOY",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "BPK GUNTUR",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "BPKLAEREGAR",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "BPKREGAR",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "BPN",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "BR",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "BUDI",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "CAPELLA CAFE",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "CEMPAL",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "DENATSU",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "DOYOK",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "EXA",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "GILANG",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "GIO",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "GUMRI",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "HARYONO",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "INDRAJAYAPURA",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "INKOPAD",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "IVAN",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "JASON",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "JORJ",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "JOSUA",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "KIEL SORONG",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "KIMOB",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "KO RICI",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "KOMANG",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "LANDUNG",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "LANGIT RASA RESTO & BAR",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "LUIS",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "MARKO",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "OKII",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "PABLO",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "PADOT",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "PAPPING",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "PASKAH",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "PETER",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "PK",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "POLMER",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "PT NUSA TIMUR INDO",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "RAFLI",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "RAMA",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "RETUR PEMBELIAN",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "REYHAN",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "ROMIAN CAFE",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "RONI",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "RUSDI",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "SAMPLING",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "SIBARANI",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "STEVE",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "STEVEN",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "TAHAN MARPAUNG",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "TEPEN",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "TIAN",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "TULANG RULI MARBUN",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  },
+  {
+    "type": "customer",
+    "name": "VICTOR BOGOR",
+    "npwp": null,
+    "email": null,
+    "phone": null,
+    "address": null,
+    "payment_term_days": 30,
+    "credit_limit": 0
+  }
+]

@@ -1,0 +1,548 @@
+[
+  {
+    "invoice_number": "SI20250400002",
+    "date": "2025-04-07",
+    "customer": "AGUS MALANG",
+    "invoice_total": 29508000.0,
+    "ongkir": 650000.0
+  },
+  {
+    "invoice_number": "SI20250500021",
+    "date": "2025-05-12",
+    "customer": "AGUS MALANG",
+    "invoice_total": 14589500.0,
+    "ongkir": 600000.0
+  },
+  {
+    "invoice_number": "SI20250400021",
+    "date": "2025-04-17",
+    "customer": "BANG ADE",
+    "invoice_total": 14000000.0,
+    "ongkir": 1250000.0
+  },
+  {
+    "invoice_number": "SI20250400025",
+    "date": "2025-04-21",
+    "customer": "BANG ADE",
+    "invoice_total": 1400000.0,
+    "ongkir": 1400000.0
+  },
+  {
+    "invoice_number": "SI20250400038",
+    "date": "2025-04-26",
+    "customer": "BANG ADE",
+    "invoice_total": 1125000.0,
+    "ongkir": 1125000.0
+  },
+  {
+    "invoice_number": "SI20250400001",
+    "date": "2025-04-02",
+    "customer": "BPN",
+    "invoice_total": 4000000.0,
+    "ongkir": 4000000.0
+  },
+  {
+    "invoice_number": "SI20250400010",
+    "date": "2025-04-14",
+    "customer": "BPN",
+    "invoice_total": 17800000.0,
+    "ongkir": 17800000.0
+  },
+  {
+    "invoice_number": "SI20250400014",
+    "date": "2025-04-15",
+    "customer": "BPN",
+    "invoice_total": 12000000.0,
+    "ongkir": 12000000.0
+  },
+  {
+    "invoice_number": "SI20250400022",
+    "date": "2025-04-20",
+    "customer": "BPN",
+    "invoice_total": 13350000.0,
+    "ongkir": 13350000.0
+  },
+  {
+    "invoice_number": "SI20250400026",
+    "date": "2025-04-22",
+    "customer": "BPN",
+    "invoice_total": 8800000.0,
+    "ongkir": 8800000.0
+  },
+  {
+    "invoice_number": "SI20250400033",
+    "date": "2025-04-25",
+    "customer": "BPN",
+    "invoice_total": 13200000.0,
+    "ongkir": 13200000.0
+  },
+  {
+    "invoice_number": "SI20250400035",
+    "date": "2025-04-28",
+    "customer": "BPN",
+    "invoice_total": 8700000.0,
+    "ongkir": 8700000.0
+  },
+  {
+    "invoice_number": "SI20250400041",
+    "date": "2025-04-26",
+    "customer": "BPN",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250500001",
+    "date": "2025-05-01",
+    "customer": "BPN",
+    "invoice_total": 3800000.0,
+    "ongkir": 3800000.0
+  },
+  {
+    "invoice_number": "SI20250500003",
+    "date": "2025-05-02",
+    "customer": "BPN",
+    "invoice_total": 18300000.0,
+    "ongkir": 18300000.0
+  },
+  {
+    "invoice_number": "SI20250500009",
+    "date": "2025-05-06",
+    "customer": "BPN",
+    "invoice_total": 25600000.0,
+    "ongkir": 25600000.0
+  },
+  {
+    "invoice_number": "SI20250500017",
+    "date": "2025-05-10",
+    "customer": "BPN",
+    "invoice_total": 38700000.0,
+    "ongkir": 38700000.0
+  },
+  {
+    "invoice_number": "SI20250500022",
+    "date": "2025-05-14",
+    "customer": "BPN",
+    "invoice_total": 8700000.0,
+    "ongkir": 8700000.0
+  },
+  {
+    "invoice_number": "SI20250500035",
+    "date": "2025-05-20",
+    "customer": "BPN",
+    "invoice_total": 8700000.0,
+    "ongkir": 8700000.0
+  },
+  {
+    "invoice_number": "SI20250500038",
+    "date": "2025-05-27",
+    "customer": "BPN",
+    "invoice_total": 11400000.0,
+    "ongkir": 11400000.0
+  },
+  {
+    "invoice_number": "SI20250500040",
+    "date": "2025-05-28",
+    "customer": "BPN",
+    "invoice_total": 21300000.0,
+    "ongkir": 21300000.0
+  },
+  {
+    "invoice_number": "SI20250500043",
+    "date": "2025-05-29",
+    "customer": "BPN",
+    "invoice_total": 3800000.0,
+    "ongkir": 3800000.0
+  },
+  {
+    "invoice_number": "SI20250500047",
+    "date": "2025-05-31",
+    "customer": "BPN",
+    "invoice_total": 9000000.0,
+    "ongkir": 9000000.0
+  },
+  {
+    "invoice_number": "SI20250500005",
+    "date": "2025-05-01",
+    "customer": "BPN",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250500048",
+    "date": "2025-05-31",
+    "customer": "BPN",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250500039",
+    "date": "2025-05-27",
+    "customer": "Capella Cafe",
+    "invoice_total": 2800000.0,
+    "ongkir": 2800000.0
+  },
+  {
+    "invoice_number": "SI20250500044",
+    "date": "2025-05-30",
+    "customer": "Capella Cafe",
+    "invoice_total": 5600000.0,
+    "ongkir": 5600000.0
+  },
+  {
+    "invoice_number": "SI20250400008",
+    "date": "2025-04-10",
+    "customer": "DENATSU",
+    "invoice_total": 13100000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400009",
+    "date": "2025-04-12",
+    "customer": "DENATSU",
+    "invoice_total": 9000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400027",
+    "date": "2025-04-23",
+    "customer": "DENATSU",
+    "invoice_total": 7800000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400032",
+    "date": "2025-04-25",
+    "customer": "DENATSU",
+    "invoice_total": 4000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400037",
+    "date": "2025-04-28",
+    "customer": "DENATSU",
+    "invoice_total": 9000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500002",
+    "date": "2025-05-02",
+    "customer": "DENATSU",
+    "invoice_total": 4100000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500029",
+    "date": "2025-05-16",
+    "customer": "DENATSU",
+    "invoice_total": 4000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500033",
+    "date": "2025-05-20",
+    "customer": "DENATSU",
+    "invoice_total": 7500000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400020",
+    "date": "2025-04-19",
+    "customer": "EXA",
+    "invoice_total": 112800000.0,
+    "ongkir": 112800000.0
+  },
+  {
+    "invoice_number": "SI20250500034",
+    "date": "2025-05-18",
+    "customer": "EXA",
+    "invoice_total": 130600000.0,
+    "ongkir": 130600000.0
+  },
+  {
+    "invoice_number": "SI20250400004",
+    "date": "2025-04-07",
+    "customer": "gio",
+    "invoice_total": 1999800.0,
+    "ongkir": 1999800.0
+  },
+  {
+    "invoice_number": "SI20250500028",
+    "date": "2025-05-16",
+    "customer": "indrajayapura",
+    "invoice_total": 19000000.0,
+    "ongkir": 19000000.0
+  },
+  {
+    "invoice_number": "SI20250500008",
+    "date": "2025-05-01",
+    "customer": "innerbox",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250400013",
+    "date": "2025-04-16",
+    "customer": "joko",
+    "invoice_total": 15000000.0,
+    "ongkir": 15000000.0
+  },
+  {
+    "invoice_number": "SI20250500007",
+    "date": "2025-05-04",
+    "customer": "joko",
+    "invoice_total": 10500000.0,
+    "ongkir": 10500000.0
+  },
+  {
+    "invoice_number": "SI20250500046",
+    "date": "2025-05-30",
+    "customer": "joko",
+    "invoice_total": 7000000.0,
+    "ongkir": 7000000.0
+  },
+  {
+    "invoice_number": "SI20250400040",
+    "date": "2025-04-29",
+    "customer": "jorj",
+    "invoice_total": 1400000.0,
+    "ongkir": 1400000.0
+  },
+  {
+    "invoice_number": "SI20250400034",
+    "date": "2025-04-26",
+    "customer": "KIEL SORONG",
+    "invoice_total": 5900000.0,
+    "ongkir": 5900000.0
+  },
+  {
+    "invoice_number": "SI20250400036",
+    "date": "2025-04-28",
+    "customer": "KIEL SORONG",
+    "invoice_total": 1950000.0,
+    "ongkir": 1950000.0
+  },
+  {
+    "invoice_number": "SI20250500026",
+    "date": "2025-05-16",
+    "customer": "KIEL SORONG",
+    "invoice_total": 155800000.0,
+    "ongkir": 155800000.0
+  },
+  {
+    "invoice_number": "SI20250500032",
+    "date": "2025-05-19",
+    "customer": "KIMOB",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250500020",
+    "date": "2025-05-09",
+    "customer": "okii",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250400019",
+    "date": "2025-04-17",
+    "customer": "rafli",
+    "invoice_total": 350000.0,
+    "ongkir": 350000.0
+  },
+  {
+    "invoice_number": "SI20250500037",
+    "date": "2025-05-27",
+    "customer": "rafli",
+    "invoice_total": 325000.0,
+    "ongkir": 325000.0
+  },
+  {
+    "invoice_number": "SI20250500042",
+    "date": "2025-05-29",
+    "customer": "rafli",
+    "invoice_total": 620000.0,
+    "ongkir": 620000.0
+  },
+  {
+    "invoice_number": "SI20250400018",
+    "date": "2025-04-16",
+    "customer": "RETUR PEMBELIAN",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250400042",
+    "date": "2025-04-26",
+    "customer": "RETUR PEMBELIAN",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250500049",
+    "date": "2025-05-01",
+    "customer": "RETUR PEMBELIAN",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250500004",
+    "date": "2025-05-02",
+    "customer": "romian cafe",
+    "invoice_total": 5000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500031",
+    "date": "2025-05-19",
+    "customer": "romian cafe",
+    "invoice_total": 4900000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400005",
+    "date": "2025-04-07",
+    "customer": "RUSDI",
+    "invoice_total": 13600000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400017",
+    "date": "2025-04-09",
+    "customer": "RUSDI",
+    "invoice_total": 6915000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400015",
+    "date": "2025-04-15",
+    "customer": "RUSDI",
+    "invoice_total": 28000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400016",
+    "date": "2025-04-15",
+    "customer": "RUSDI",
+    "invoice_total": 16600000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400023",
+    "date": "2025-04-21",
+    "customer": "RUSDI",
+    "invoice_total": 24500000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400024",
+    "date": "2025-04-21",
+    "customer": "RUSDI",
+    "invoice_total": 5900000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400029",
+    "date": "2025-04-24",
+    "customer": "RUSDI",
+    "invoice_total": 20100000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400028",
+    "date": "2025-04-25",
+    "customer": "RUSDI",
+    "invoice_total": 70000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500010",
+    "date": "2025-05-06",
+    "customer": "RUSDI",
+    "invoice_total": 33500000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500012",
+    "date": "2025-05-08",
+    "customer": "RUSDI",
+    "invoice_total": 68000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500018",
+    "date": "2025-05-10",
+    "customer": "RUSDI",
+    "invoice_total": 41000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500019",
+    "date": "2025-05-16",
+    "customer": "RUSDI",
+    "invoice_total": 70000000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500027",
+    "date": "2025-05-17",
+    "customer": "RUSDI",
+    "invoice_total": 11200000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500036",
+    "date": "2025-05-22",
+    "customer": "RUSDI",
+    "invoice_total": 8800000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250500045",
+    "date": "2025-05-30",
+    "customer": "RUSDI",
+    "invoice_total": 6700000.0,
+    "ongkir": 50000.0
+  },
+  {
+    "invoice_number": "SI20250400031",
+    "date": "2025-04-24",
+    "customer": "SAMPLING",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250500013",
+    "date": "2025-05-08",
+    "customer": "SAMPLING",
+    "invoice_total": 0.0,
+    "ongkir": 0.0
+  },
+  {
+    "invoice_number": "SI20250400006",
+    "date": "2025-04-08",
+    "customer": "sibarani",
+    "invoice_total": 4700000.0,
+    "ongkir": 4700000.0
+  },
+  {
+    "invoice_number": "SI20250400011",
+    "date": "2025-04-14",
+    "customer": "tirta",
+    "invoice_total": 9000000.0,
+    "ongkir": 9000000.0
+  },
+  {
+    "invoice_number": "SI20250500023",
+    "date": "2025-05-15",
+    "customer": "tulang ruli marbun",
+    "invoice_total": 4800000.0,
+    "ongkir": 4800000.0
+  },
+  {
+    "invoice_number": "SI20250500011",
+    "date": "2025-05-06",
+    "customer": "victor bogor",
+    "invoice_total": 4500000.0,
+    "ongkir": 4500000.0
+  }
+]

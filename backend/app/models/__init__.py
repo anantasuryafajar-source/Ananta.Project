@@ -11,6 +11,9 @@ from .invoice import Invoice, InvoiceLine, PaymentReceived
 from .purchase import Bill, BillLine, PaymentMade
 from .sequence import DocumentSequence
 from .audit import AuditLog
+# --- Modul distribusi ASF (baru) ---
+from .courier import CourierExpense
+from .orders import PurchaseOrder, POLine, SalesOrder, SOLine
 
 __all__ = [
     "Base", "Company", "Warehouse", "User", "Role", "UserRole",
@@ -18,4 +21,7 @@ __all__ = [
     "StockMovement", "Journal", "JournalEntry", "Invoice", "InvoiceLine",
     "PaymentReceived", "Bill", "BillLine", "PaymentMade",
     "DocumentSequence", "AuditLog",
+    # baru
+    "CourierExpense",
+    "PurchaseOrder", "POLine", "SalesOrder", "SOLine",
 ]

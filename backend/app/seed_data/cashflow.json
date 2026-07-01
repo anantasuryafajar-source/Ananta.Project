@@ -1,0 +1,713 @@
+[
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Pembayaran HPP",
+    "account_type": "AP",
+    "amount": 366025000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Bonus Silo",
+    "account_type": "Bonus",
+    "amount": 9500000.0,
+    "cash_bucket": "Pengops",
+    "note": "BONUS MID JULI"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Bonus Abay",
+    "account_type": "Bonus",
+    "amount": 4250000.0,
+    "cash_bucket": "Pengops",
+    "note": "BONUS MID JULI"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Bonus Fei",
+    "account_type": "Bonus",
+    "amount": 4250000.0,
+    "cash_bucket": "Pengops",
+    "note": "BONUS MID JULI"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Bonus Abay",
+    "account_type": "Bonus",
+    "amount": 1750000.0,
+    "cash_bucket": "Pengops",
+    "note": "BONUS JUNI AKHIR"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Bonus Fei",
+    "account_type": "Bonus",
+    "amount": 1750000.0,
+    "cash_bucket": "Pengops",
+    "note": "BONUS JUNI AKHIR"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Bonus Silo",
+    "account_type": "Bonus",
+    "amount": 3500000.0,
+    "cash_bucket": "Pengops",
+    "note": "BONUS JUNI AKHIR"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Entertaiment",
+    "account_type": "Entertaiment",
+    "amount": 1290900.0,
+    "cash_bucket": "Pengops",
+    "note": "KADO IDO"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Gaji Pegawai",
+    "account_type": "Fix Cost",
+    "amount": 4000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Gaji Abay",
+    "account_type": "Fix Cost",
+    "amount": 9000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Gaji Pei",
+    "account_type": "Fix Cost",
+    "amount": 9000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Gaji Silo",
+    "account_type": "Fix Cost",
+    "amount": 12000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Investor Delfina",
+    "account_type": "Investor",
+    "amount": 22208000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Investor Jorj",
+    "account_type": "Investor",
+    "amount": 30000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Investor Delfina",
+    "account_type": "Investor",
+    "amount": 3900000.0,
+    "cash_bucket": "Pengops",
+    "note": "DEVIDEN Q2"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Investor Nyokap",
+    "account_type": "Investor",
+    "amount": 10500000.0,
+    "cash_bucket": "Pengops",
+    "note": "DEVIDEN Q2"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Komisi Bokap adin",
+    "account_type": "Komisi",
+    "amount": 812000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Profit Tirta",
+    "account_type": "Komisi",
+    "amount": 8800000.0,
+    "cash_bucket": "Pengops",
+    "note": "16RBV"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Komisi Bang Yuki",
+    "account_type": "Komisi",
+    "amount": 4830000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Komisi Pak Ketua",
+    "account_type": "Komisi",
+    "amount": 10270000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Pembayaran HPP",
+    "account_type": "Payment",
+    "amount": 98800000.0,
+    "cash_bucket": "Pengops",
+    "note": "RBV"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Pembayaran HPP",
+    "account_type": "Payment",
+    "amount": 24974000.0,
+    "cash_bucket": "Pengops",
+    "note": "KARDUS"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Aset Perusahaan",
+    "account_type": "Payment",
+    "amount": 3000000.0,
+    "cash_bucket": "Pengops",
+    "note": "PELUNASAN DP MOBIL"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Representasi",
+    "account_type": "Variable Cost",
+    "amount": 4304533.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Retribusi & Sumbangan",
+    "account_type": "Variable Cost",
+    "amount": 1000000.0,
+    "cash_bucket": "Pengops",
+    "note": "SUMBANGAN"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Bensin",
+    "account_type": "Variable Cost",
+    "amount": 3154000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Etoll",
+    "account_type": "Variable Cost",
+    "amount": 1050000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Tip Bang Enal",
+    "account_type": "Variable Cost",
+    "amount": 200000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Ekspedisi Enal",
+    "account_type": "Variable Cost",
+    "amount": 9000000.0,
+    "cash_bucket": "Pengops",
+    "note": "40RBV"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Ekspedisi, Pos & Materai",
+    "account_type": "Variable Cost",
+    "amount": 1128000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Bonus, Pesangon & Kompensasi",
+    "account_type": "Variable Cost",
+    "amount": 150000.0,
+    "cash_bucket": "Pengops",
+    "note": "OT BANG RALIN"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Tip QC",
+    "account_type": "Variable Cost",
+    "amount": 3681000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Tip",
+    "account_type": "Variable Cost",
+    "amount": 850000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Perlengkapan Kantor",
+    "account_type": "Variable Cost",
+    "amount": 193000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Perawatan Kendaraan",
+    "account_type": "Variable Cost",
+    "amount": 1086000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Gosend",
+    "account_type": "Variable Cost",
+    "amount": 788000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Internet, Komunikasi & Lainnya",
+    "account_type": "Variable Cost",
+    "amount": 401000.0,
+    "cash_bucket": "Pengops",
+    "note": "MODEM & ACCURATE"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Parkir",
+    "account_type": "Variable Cost",
+    "amount": 136000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Transportasi Karyawan",
+    "account_type": "Variable Cost",
+    "amount": 220000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Ekspedisi, Pos & Materai",
+    "account_type": "Variable Cost",
+    "amount": 63000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Listrik",
+    "account_type": "Variable Cost",
+    "amount": 78129.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban PAM",
+    "account_type": "Variable Cost",
+    "amount": 48750.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Katering & Makan Karyawan",
+    "account_type": "Variable Cost",
+    "amount": 150000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Beban Sewa Gedung",
+    "account_type": "Payment",
+    "amount": 4000000.0,
+    "cash_bucket": "Pengops",
+    "note": "DEPOSIT GUDANG"
+  },
+  {
+    "month": "Juli",
+    "quarter": "Q3",
+    "account": "Dana Darurat",
+    "account_type": "Dana Darurat",
+    "amount": 11600000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Bonus Abay",
+    "account_type": "Bonus",
+    "amount": 9450000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Bonus Fei",
+    "account_type": "Bonus",
+    "amount": 9450000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Bonus Silo",
+    "account_type": "Bonus",
+    "amount": 18900000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Bonus Staff",
+    "account_type": "Bonus",
+    "amount": 1070000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Ekspedisi Enal",
+    "account_type": "Variable Cost",
+    "amount": 11250000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Ekspedisi, Pos & Materai",
+    "account_type": "Variable Cost",
+    "amount": 7361000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Internet, Komunikasi & Lainnya",
+    "account_type": "Variable Cost",
+    "amount": 276000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Katering & Makan Karyawan",
+    "account_type": "Variable Cost",
+    "amount": 100000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Kebersihan",
+    "account_type": "Variable Cost",
+    "amount": 150000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Listrik",
+    "account_type": "Variable Cost",
+    "amount": 105000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Perawatan Kendaraan",
+    "account_type": "Variable Cost",
+    "amount": 1592000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Perlengkapan Kantor",
+    "account_type": "Variable Cost",
+    "amount": 1238000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Representasi",
+    "account_type": "Variable Cost",
+    "amount": 2207045.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Telekomunikasi",
+    "account_type": "Variable Cost",
+    "amount": 50000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Transportasi Karyawan",
+    "account_type": "Variable Cost",
+    "amount": 481000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Bensin",
+    "account_type": "Variable Cost",
+    "amount": 3150000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Etoll",
+    "account_type": "Variable Cost",
+    "amount": 1150000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Gaji Abay",
+    "account_type": "Fix Cost",
+    "amount": 9000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Gaji Bernie",
+    "account_type": "Fix Cost",
+    "amount": 5200000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Gaji Pei",
+    "account_type": "Fix Cost",
+    "amount": 9000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Gaji Ralin",
+    "account_type": "Fix Cost",
+    "amount": 4000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Gaji Silo",
+    "account_type": "Fix Cost",
+    "amount": 12000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Gosend",
+    "account_type": "Variable Cost",
+    "amount": 180000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Parkir",
+    "account_type": "Variable Cost",
+    "amount": 14000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Perlengkapan Kantor",
+    "account_type": "Variable Cost",
+    "amount": 284600.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Tip",
+    "account_type": "Variable Cost",
+    "amount": 650000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Tip Bang Enal",
+    "account_type": "Variable Cost",
+    "amount": 300000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Tip QC",
+    "account_type": "Variable Cost",
+    "amount": 1735000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Beban Cicilan Aset",
+    "account_type": "Variable Cost",
+    "amount": 1710000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Pengeluaran Bisnis Lainnya",
+    "account_type": "Lainnya",
+    "amount": 4000000.0,
+    "cash_bucket": "Dana Entertain",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Pengeluaran Bisnis Lainnya",
+    "account_type": "Lainnya",
+    "amount": 6480000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Pengeluaran Bisnis Lainnya",
+    "account_type": "Lainnya",
+    "amount": 6000000.0,
+    "cash_bucket": "Dana Darurat",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Pengeluaran Bisnis Lainnya",
+    "account_type": "Lainnya",
+    "amount": 600000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  },
+  {
+    "month": "Agustus",
+    "quarter": "Q3",
+    "account": "Dana Darurat",
+    "account_type": "Dana Darurat",
+    "amount": 4000000.0,
+    "cash_bucket": "Pengops",
+    "note": null
+  }
+]

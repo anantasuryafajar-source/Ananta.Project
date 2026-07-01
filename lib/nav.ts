@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Wallet,
-  BookOpen, Users, FileBarChart, Settings,
+  BookOpen, Users, FileBarChart, Settings, Warehouse, Bike,
 } from "lucide-react";
 
 export const NAV = [
@@ -8,6 +8,8 @@ export const NAV = [
   { href: "/penjualan", label: "Penjualan", icon: ShoppingCart },
   { href: "/pembelian", label: "Pembelian", icon: Truck },
   { href: "/produk", label: "Produk & Stok", icon: Package },
+  { href: "/gudang", label: "Gudang & Transfer", icon: Warehouse },
+  { href: "/kurir", label: "Kurir & Ongkir", icon: Bike },
   { href: "/kas-bank", label: "Kas & Bank", icon: Wallet },
   { href: "/akuntansi", label: "Akuntansi", icon: BookOpen },
   { href: "/kontak", label: "Kontak", icon: Users },

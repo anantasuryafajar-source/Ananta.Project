@@ -1,0 +1,164 @@
+[
+  {
+    "sku": "CM",
+    "name": "Captain Morgan Spiced Rum",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 1600000.0,
+    "sale_price": 2350000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "RBV",
+    "name": "Robbinson Vodka",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 1300000.0,
+    "sale_price": 3000000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "B",
+    "name": "JW Black Label 750ml",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 3700000.0,
+    "sale_price": 4200000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "CHO",
+    "name": "Chivas Regal 12 YO 750ml",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 3700000.0,
+    "sale_price": 4300000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "R",
+    "name": "JW Red Label 750ml",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 2800000.0,
+    "sale_price": 3400000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "M",
+    "name": "Martell VSOP",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 6000000.0,
+    "sale_price": 7500000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "H",
+    "name": "Hennessy VSOP EU",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 6500000.0,
+    "sale_price": 8000000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "JMS30",
+    "name": "Jameson 750ml",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 3000000.0,
+    "sale_price": 3500000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "JDO",
+    "name": "Jack Daniel's",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 3200000.0,
+    "sale_price": 3900000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "SG",
+    "name": "Singleton12 Glenord",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 5600000.0,
+    "sale_price": 6800000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "GF",
+    "name": "Glenfiddich 12 YO",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 5500000.0,
+    "sale_price": 6900000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "JS",
+    "name": "Jose Cuervo Tequila",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 2800000.0,
+    "sale_price": 3800000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "GLV",
+    "name": "Glenlivet 12 YO",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 5000000.0,
+    "sale_price": 6300000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "MCDC",
+    "name": "Macallan 12 Double Cask",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 13500000.0,
+    "sale_price": 16500000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "MCTC",
+    "name": "Macallan 12 Triple Cask",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 13500000.0,
+    "sale_price": 16500000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "MCSO",
+    "name": "Macallan 12 Sherry Oak",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 14000000.0,
+    "sale_price": 17500000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "MTN",
+    "name": "Martell Noblige",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 6000000.0,
+    "sale_price": 7700000.0,
+    "min_stock": 0
+  },
+  {
+    "sku": "SGN",
+    "name": "Singleton 12 Lucious Nectar",
+    "kind": "good",
+    "unit": "botol",
+    "purchase_price": 4000000.0,
+    "sale_price": 6000000.0,
+    "min_stock": 0
+  }
+]
