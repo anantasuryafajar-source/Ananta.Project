@@ -14,7 +14,7 @@ export function Sidebar() {
         </p>
         <ContinuityRibbon className="mt-1 opacity-80" />
       </div>
-      <nav className="flex-1 space-y-1 px-3">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3">
         {NAV.map(({ href, label, icon: Icon }) => {
           const active = path.startsWith(href);
           return (
@@ -33,7 +33,7 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <p className="px-5 py-4 text-caption text-ink-subtle">v0.1.0 · Calm Ledger</p>
+      <p className="px-5 py-4 text-caption text-ink-subtle">v0.3.0 · Calm Ledger</p>
     </aside>
   );
 }

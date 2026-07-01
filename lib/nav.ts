@@ -1,11 +1,14 @@
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Wallet,
   BookOpen, Users, FileBarChart, Settings, Warehouse, Bike,
+  ClipboardList, ClipboardCheck,
 } from "lucide-react";
 
 export const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/sales-orders", label: "Sales Order", icon: ClipboardCheck },
   { href: "/penjualan", label: "Penjualan", icon: ShoppingCart },
+  { href: "/purchase-orders", label: "Purchase Order", icon: ClipboardList },
   { href: "/pembelian", label: "Pembelian", icon: Truck },
   { href: "/produk", label: "Produk & Stok", icon: Package },
   { href: "/gudang", label: "Gudang & Transfer", icon: Warehouse },

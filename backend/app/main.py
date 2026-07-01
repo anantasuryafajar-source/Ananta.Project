@@ -5,8 +5,8 @@ from .core.config import settings
 from .routers import (
     auth, contacts, products, accounts, invoices, dashboard,
     purchases, payments, reports,
-    # --- modul distribusi ASF (baru) ---
-    warehouses, courier, orders, reports_ext,
+    # --- modul distribusi ASF ---
+    warehouses, courier, orders, reports_ext, settings as settings_router,
 )
 
 
@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Ananta API",
-    version="0.2.0",
+    version="0.3.0",
     description="Sistem manajemen bisnis & akuntansi Ananta.",
     openapi_url="/api/v1/openapi.json",
     docs_url="/docs",
@@ -34,18 +34,17 @@ app.add_middleware(
 
 API = "/api/v1"
 
-# router modul lama
 for r in (auth, contacts, products, accounts, invoices, dashboard,
           purchases, payments, reports):
     app.include_router(r.router, prefix=API)
 
-# router modul distribusi baru
 app.include_router(warehouses.router, prefix=API)
 app.include_router(warehouses.transfer_router, prefix=API)
 app.include_router(courier.router, prefix=API)
 app.include_router(orders.po_router, prefix=API)
 app.include_router(orders.so_router, prefix=API)
 app.include_router(reports_ext.router, prefix=API)
+app.include_router(settings_router.router, prefix=API)
 
 
 @app.get("/health", tags=["meta"])
