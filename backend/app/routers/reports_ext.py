@@ -38,3 +38,11 @@ async def quarterly_recap(
     user: User = Depends(current_user), db: AsyncSession = Depends(get_db),
 ):
     return await reports_ext.quarterly_recap(db, user.company_id)
+
+
+@router.get("/gpm")
+async def gpm(
+    start: date = Query(...), end: date = Query(...),
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db),
+):
+    return await reports_ext.gpm(db, user.company_id, start, end)

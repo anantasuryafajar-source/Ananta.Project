@@ -17,9 +17,10 @@ type Quarterly = { items: { quarter: string; omzet: string; hpp: string; gross_p
 type ArLimit = { items: { customer: string; outstanding: string; credit_limit: string; ratio: number | null; status: string }[]; total_outstanding: string };
 type Commission = { rate: number; items: { sku: string; name: string; qty: string; revenue: string; margin: string; commission: string }[]; total_commission: string };
 
-const TABS = ["Laba Rugi", "Arus Kas", "Rekap Kuartal", "AR Aging", "AR Limit", "Komisi", "Valuasi Stok"] as const;
+const TABS = ["Laba Rugi", "Arus Kas", "Rekap Kuartal", "AR Aging", "AR Limit", "Komisi", "GPM", "Valuasi Stok"] as const;
 type Tab = (typeof TABS)[number];
-const withDate = new Set<Tab>(["Laba Rugi", "Arus Kas", "Komisi"]);
+const withDate = new Set<Tab>(["Laba Rugi", "Arus Kas", "Komisi", "GPM"]);
+type Gpm = { by_sku: { sku: string; name: string; revenue: string; margin: string; gpm: number | null }[]; by_customer: { customer: string; revenue: string; margin: string; gpm: number | null }[] };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
@@ -29,11 +30,12 @@ export default function LaporanPage() {
   const [start, setStart] = useState(yearStart());
   const [end, setEnd] = useState(today());
   const [data, setData] = useState<any>(null);
+  const [dataTab, setDataTab] = useState<Tab | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    setErr(null); setLoading(true); setData(null);
+    setErr(null); setLoading(true); setData(null); setDataTab(null);
     try {
       const url: Record<Tab, string> = {
         "Laba Rugi": `/reports/profit-loss?start=${start}&end=${end}`,
@@ -42,9 +44,11 @@ export default function LaporanPage() {
         "AR Aging": `/reports/ar-aging?as_of=${end}`,
         "AR Limit": `/reports/ar-limit`,
         "Komisi": `/reports/commission?start=${start}&end=${end}`,
+        "GPM": `/reports/gpm?start=${start}&end=${end}`,
         "Valuasi Stok": `/reports/stock-valuation`,
       };
       setData(await api<any>(url[tab]));
+      setDataTab(tab);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Gagal memuat laporan.");
     } finally { setLoading(false); }
@@ -70,19 +74,28 @@ export default function LaporanPage() {
             {(withDate.has(tab) || tab === "AR Aging") && (
               <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded-[var(--radius-input)] border border-line bg-surface px-2 py-1" />
             )}
+            <button onClick={() => exportCSV(tab, data)} disabled={!data || dataTab !== tab}
+              className="rounded-[var(--radius-input)] border border-line bg-surface px-3 py-1 text-ink-muted transition-colors hover:text-ink disabled:opacity-40">
+              Ekspor CSV
+            </button>
+            <button onClick={() => printReport(tab, data)} disabled={!data || dataTab !== tab}
+              className="rounded-[var(--radius-input)] border border-line bg-surface px-3 py-1 text-ink-muted transition-colors hover:text-ink disabled:opacity-40">
+              Cetak / PDF
+            </button>
           </div>
         </div>
 
         {err && <Card className="text-sm text-danger">{err}</Card>}
         {loading && <Card className="text-sm text-ink-muted">Memuat…</Card>}
 
-        {!loading && data && tab === "Laba Rugi" && <ProfitLoss pl={data as PL} />}
-        {!loading && data && tab === "Arus Kas" && <CashflowView cf={data as Cashflow} />}
-        {!loading && data && tab === "Rekap Kuartal" && <QuarterlyView q={data as Quarterly} />}
-        {!loading && data && tab === "AR Aging" && <ArAging aging={data as Aging} />}
-        {!loading && data && tab === "AR Limit" && <ArLimitView a={data as ArLimit} />}
-        {!loading && data && tab === "Komisi" && <CommissionView c={data as Commission} />}
-        {!loading && data && tab === "Valuasi Stok" && <StockVal stock={data as Stock} />}
+        {!loading && data && dataTab === tab && tab === "Laba Rugi" && <ProfitLoss pl={data as PL} />}
+        {!loading && data && dataTab === tab && tab === "Arus Kas" && <CashflowView cf={data as Cashflow} />}
+        {!loading && data && dataTab === tab && tab === "Rekap Kuartal" && <QuarterlyView q={data as Quarterly} />}
+        {!loading && data && dataTab === tab && tab === "AR Aging" && <ArAging aging={data as Aging} />}
+        {!loading && data && dataTab === tab && tab === "AR Limit" && <ArLimitView a={data as ArLimit} />}
+        {!loading && data && dataTab === tab && tab === "Komisi" && <CommissionView c={data as Commission} />}
+        {!loading && data && dataTab === tab && tab === "GPM" && <GpmView g={data as Gpm} />}
+        {!loading && data && dataTab === tab && tab === "Valuasi Stok" && <StockVal stock={data as Stock} />}
       </div>
     </>
   );
@@ -344,4 +357,124 @@ function Line({ k, v, bold }: { k: string; v: string; bold?: boolean }) {
       <span className={`tabular-nums ${bold ? "font-semibold text-ink" : "text-ink"}`}>{rupiah(v)}</span>
     </div>
   );
+}
+
+/* ---------- GPM (margin per SKU & customer) ---------- */
+function GpmView({ g }: { g: Gpm }) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <p className="mb-2 text-sm font-medium text-ink">GPM per SKU</p>
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-caption uppercase text-ink-subtle">
+            <th className="py-1">SKU</th><th>Produk</th><th className="text-right">Omzet</th><th className="text-right">Margin</th><th className="text-right">GPM%</th>
+          </tr></thead>
+          <tbody>
+            {g.by_sku.map((r) => (
+              <tr key={r.sku} className="border-t border-line">
+                <td className="py-1 text-ink-muted">{r.sku}</td><td className="text-ink">{r.name}</td>
+                <td className="text-right tabular-nums text-ink-muted">{rupiah(r.revenue)}</td>
+                <td className="text-right tabular-nums text-ink">{rupiah(r.margin)}</td>
+                <td className="text-right tabular-nums text-primary">{r.gpm != null ? `${r.gpm}%` : "—"}</td>
+              </tr>
+            ))}
+            {g.by_sku.length === 0 && <tr><td colSpan={5} className="py-3 text-center text-ink-subtle">Belum ada penjualan pada periode ini.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+      <Card>
+        <p className="mb-2 text-sm font-medium text-ink">GPM per Customer</p>
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-caption uppercase text-ink-subtle">
+            <th className="py-1">Customer</th><th className="text-right">Omzet</th><th className="text-right">Margin</th><th className="text-right">GPM%</th>
+          </tr></thead>
+          <tbody>
+            {g.by_customer.map((r) => (
+              <tr key={r.customer} className="border-t border-line">
+                <td className="py-1 text-ink">{r.customer}</td>
+                <td className="text-right tabular-nums text-ink-muted">{rupiah(r.revenue)}</td>
+                <td className="text-right tabular-nums text-ink">{rupiah(r.margin)}</td>
+                <td className="text-right tabular-nums text-primary">{r.gpm != null ? `${r.gpm}%` : "—"}</td>
+              </tr>
+            ))}
+            {g.by_customer.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-ink-subtle">Belum ada penjualan pada periode ini.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------- Ekspor CSV & Cetak/PDF ---------- */
+type Tabular = { title: string; headers: string[]; rows: (string | number)[][] };
+
+function tableFor(tab: string, data: any): Tabular {
+  switch (tab) {
+    case "Laba Rugi": {
+      const rows: (string | number)[][] = [];
+      (data.income ?? []).forEach((r: any) => rows.push(["Pendapatan", r.name, r.amount]));
+      (data.expense ?? []).forEach((r: any) => rows.push(["Beban", r.name, r.amount]));
+      rows.push(["", "Laba Bersih", data.net_profit]);
+      return { title: "Laba Rugi", headers: ["Kelompok", "Akun", "Jumlah"], rows };
+    }
+    case "Arus Kas":
+      return { title: "Arus Kas", headers: ["Bulan", "Masuk", "Keluar", "Bersih"],
+        rows: (data.months ?? []).map((m: any) => [m.month, m.in, m.out, m.net]) };
+    case "Rekap Kuartal":
+      return { title: "Rekap Kuartal", headers: ["Kuartal", "Omzet", "HPP", "Laba Kotor"],
+        rows: (data.items ?? []).map((i: any) => [i.quarter, i.omzet, i.hpp, i.gross_profit]) };
+    case "AR Aging":
+      return { title: "AR Aging", headers: ["No.", "Customer", "Umur (hari)", "Outstanding"],
+        rows: (data.items ?? []).map((i: any) => [i.number, i.contact, i.age_days, i.outstanding]) };
+    case "AR Limit":
+      return { title: "AR Limit", headers: ["Customer", "Outstanding", "Limit", "Status"],
+        rows: (data.items ?? []).map((i: any) => [i.customer, i.outstanding, i.credit_limit, i.status]) };
+    case "Komisi":
+      return { title: "Komisi", headers: ["SKU", "Produk", "Qty", "Omzet", "Margin", "Komisi"],
+        rows: (data.items ?? []).map((i: any) => [i.sku, i.name, i.qty, i.revenue, i.margin, i.commission]) };
+    case "GPM":
+      return { title: "GPM per SKU", headers: ["SKU", "Produk", "Omzet", "Margin", "GPM%"],
+        rows: (data.by_sku ?? []).map((i: any) => [i.sku, i.name, i.revenue, i.margin, i.gpm ?? ""]) };
+    case "Valuasi Stok":
+      return { title: "Valuasi Stok", headers: ["SKU", "Nama", "Qty", "Avg Cost", "Nilai"],
+        rows: (data.items ?? []).map((i: any) => [i.sku, i.name, i.quantity, i.avg_cost, i.value]) };
+    default:
+      return { title: tab, headers: [], rows: [] };
+  }
+}
+
+function exportCSV(tab: string, data: any) {
+  if (!data) return;
+  const t = tableFor(tab, data);
+  const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = [t.headers, ...t.rows].map((r) => r.map(esc).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${t.title.replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function printReport(tab: string, data: any) {
+  if (!data) return;
+  const t = tableFor(tab, data);
+  const th = t.headers.map((h) => `<th>${h}</th>`).join("");
+  const tr = t.rows.map((r) => `<tr>${r.map((c) => `<td>${String(c ?? "")}</td>`).join("")}</tr>`).join("");
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(`<!doctype html><html><head><title>${t.title}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:24px;color:#1b2a26}
+      h1{font-size:18px;margin:0 0 4px} p{color:#666;font-size:12px;margin:0 0 16px}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}
+      th{background:#f3f5f3} td:nth-child(n+3){text-align:right}
+    </style></head><body>
+    <h1>Ananta — ${t.title}</h1><p>Dicetak ${new Date().toLocaleString("id-ID")}</p>
+    <table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>
+    <script>window.onload=function(){window.print()}</script>
+    </body></html>`);
+  w.document.close();
 }

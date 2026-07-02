@@ -153,3 +153,48 @@ async def quarterly_recap(db: AsyncSession, company_id: str) -> dict:
               "gross_profit": _f(v["omzet"] - v["hpp"])}
              for k, v in sorted(agg.items())]
     return {"items": items}
+
+
+# ------------------------------------------------------------ GPM (margin) per SKU & customer
+async def gpm(db: AsyncSession, company_id: str, start: date, end: date) -> dict:
+    """Gross Profit Margin per SKU dan per customer (mirip sheet GPMCUST).
+    Modal dari purchase_price. GPM% = margin / omzet * 100."""
+    from ..models import Contact
+    rows = (await db.execute(
+        select(Contact.name, Product.sku, Product.name, Product.purchase_price,
+               InvoiceLine.quantity, InvoiceLine.unit_price, InvoiceLine.discount)
+        .join(InvoiceLine, InvoiceLine.product_id == Product.id)
+        .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
+        .join(Contact, Contact.id == Invoice.contact_id, isouter=True)
+        .where(Invoice.company_id == company_id,
+               Invoice.status.in_(("posted", "paid", "overdue")),
+               Invoice.date >= start, Invoice.date <= end)
+    )).all()
+
+    by_sku: dict[str, dict] = {}
+    by_cust: dict[str, dict] = {}
+    for cust, sku, pname, modal, qty, price, disc in rows:
+        q = Decimal(str(qty or 0))
+        revenue = q * Decimal(str(price or 0)) - Decimal(str(disc or 0))
+        cost = q * Decimal(str(modal or 0))
+        margin = revenue - cost
+        s = by_sku.setdefault(sku, {"name": pname, "revenue": Decimal("0"), "margin": Decimal("0")})
+        s["revenue"] += revenue
+        s["margin"] += margin
+        cname = cust or "(tanpa nama)"
+        c = by_cust.setdefault(cname, {"revenue": Decimal("0"), "margin": Decimal("0")})
+        c["revenue"] += revenue
+        c["margin"] += margin
+
+    def pct(margin, revenue):
+        return round(float(margin / revenue * 100), 2) if revenue > 0 else None
+
+    sku_items = [{"sku": k, "name": v["name"], "revenue": _f(v["revenue"]),
+                  "margin": _f(v["margin"]), "gpm": pct(v["margin"], v["revenue"])}
+                 for k, v in by_sku.items()]
+    sku_items.sort(key=lambda x: Decimal(x["margin"]), reverse=True)
+    cust_items = [{"customer": k, "revenue": _f(v["revenue"]),
+                   "margin": _f(v["margin"]), "gpm": pct(v["margin"], v["revenue"])}
+                  for k, v in by_cust.items()]
+    cust_items.sort(key=lambda x: Decimal(x["margin"]), reverse=True)
+    return {"by_sku": sku_items, "by_customer": cust_items}
