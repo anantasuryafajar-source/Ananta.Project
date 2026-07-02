@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Building2, Warehouse as WhIcon, Users, Pencil } from "lucide-react";
+import { Plus, Building2, Warehouse as WhIcon, Users, Pencil, KeyRound } from "lucide-react";
 import { api } from "@/lib/api";
 import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
@@ -32,6 +32,9 @@ export default function PengaturanPage() {
 
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [eu, setEu] = useState<{ roles: string[]; is_active: boolean }>({ roles: [], is_active: true });
+
+  const [resetUser, setResetUser] = useState<UserRow | null>(null);
+  const [rp, setRp] = useState({ new_password: "", confirm: "" });
 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -97,6 +100,23 @@ export default function PengaturanPage() {
       });
       setEditUser(null); muat();
     } catch (err) { setFormError(err instanceof Error ? err.message : "Gagal menyimpan."); }
+    finally { setSaving(false); }
+  }
+
+  async function simpanReset(e: FormEvent) {
+    e.preventDefault();
+    if (!resetUser) return;
+    setFormError(null);
+    if (rp.new_password.length < 8) return setFormError("Kata sandi minimal 8 karakter.");
+    if (rp.new_password !== rp.confirm) return setFormError("Konfirmasi kata sandi tidak sama.");
+    setSaving(true);
+    try {
+      await api(`/settings/users/${resetUser.id}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify({ new_password: rp.new_password }),
+      });
+      setResetUser(null);
+    } catch (err) { setFormError(err instanceof Error ? err.message : "Gagal reset kata sandi."); }
     finally { setSaving(false); }
   }
 
@@ -173,10 +193,16 @@ export default function PengaturanPage() {
                   <td className="text-ink-muted capitalize">{u.roles.join(", ") || "—"}</td>
                   <td className="text-right">{u.is_active ? <span className="text-success">Aktif</span> : <span className="text-ink-subtle">Nonaktif</span>}</td>
                   <td className="text-right">
-                    <button onClick={() => { setFormError(null); setEu({ roles: u.roles, is_active: u.is_active }); setEditUser(u); }}
-                      className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink" aria-label="Edit user">
-                      <Pencil size={15} />
-                    </button>
+                    <div className="flex justify-end gap-1">
+                      <button onClick={() => { setFormError(null); setRp({ new_password: "", confirm: "" }); setResetUser(u); }}
+                        className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink" aria-label="Reset kata sandi">
+                        <KeyRound size={15} />
+                      </button>
+                      <button onClick={() => { setFormError(null); setEu({ roles: u.roles, is_active: u.is_active }); setEditUser(u); }}
+                        className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink" aria-label="Edit user">
+                        <Pencil size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -268,6 +294,25 @@ export default function PengaturanPage() {
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setEditUser(null)}>Batal</Button>
             <Button type="submit" disabled={saving}>{saving ? "Menyimpan…" : "Simpan"}</Button>
+          </div>
+        </form>
+      </Modal>
+      {/* Modal reset password (owner) */}
+      <Modal open={!!resetUser} onClose={() => setResetUser(null)} title={`Reset Kata Sandi — ${resetUser?.full_name ?? ""}`}>
+        <form onSubmit={simpanReset} className="space-y-4">
+          <p className="text-sm text-ink-muted">Kata sandi baru untuk <b className="text-ink">{resetUser?.email}</b>. Sampaikan ke pengguna secara langsung.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Kata sandi baru" hint="Minimal 8 karakter">
+              <Input type="password" value={rp.new_password} onChange={(e) => setRp((f) => ({ ...f, new_password: e.target.value }))} required autoFocus />
+            </Field>
+            <Field label="Ulangi kata sandi">
+              <Input type="password" value={rp.confirm} onChange={(e) => setRp((f) => ({ ...f, confirm: e.target.value }))} required />
+            </Field>
+          </div>
+          {formError && <p className="text-sm text-danger">{formError}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setResetUser(null)}>Batal</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Menyimpan…" : "Reset"}</Button>
           </div>
         </form>
       </Modal>

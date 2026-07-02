@@ -162,3 +162,25 @@ async def update_user(
 
     await db.commit()
     return {"ok": True}
+
+
+# ============================= RESET PASSWORD (owner) =============================
+class ResetPasswordIn(BaseModel):
+    new_password: str = Field(min_length=8)
+
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_password(
+    user_id: str, body: ResetPasswordIn,
+    user: User = Depends(require_roles()),  # owner-only
+    db: AsyncSession = Depends(get_db),
+):
+    target = (await db.execute(
+        select(User).where(User.id == user_id,
+                           User.company_id == user.company_id)
+    )).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan.")
+    target.password_hash = hash_password(body.new_password)
+    await db.commit()
+    return {"ok": True}

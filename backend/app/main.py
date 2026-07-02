@@ -6,7 +6,7 @@ from .routers import (
     auth, contacts, products, accounts, invoices, dashboard,
     purchases, payments, reports,
     # --- modul distribusi ASF ---
-    warehouses, courier, orders, reports_ext, settings as settings_router,
+    warehouses, courier, orders, reports_ext, settings as settings_router, account,
     # --- modul keuangan lanjutan ---
     investors, expenses,
 )
@@ -50,6 +50,7 @@ app.include_router(settings_router.router, prefix=API)
 app.include_router(investors.router, prefix=API)
 app.include_router(expenses.router, prefix=API)
 app.include_router(expenses.loan_router, prefix=API)
+app.include_router(account.router, prefix=API)
 
 
 @app.get("/health", tags=["meta"])
