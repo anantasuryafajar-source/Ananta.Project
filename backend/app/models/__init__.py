@@ -11,9 +11,12 @@ from .invoice import Invoice, InvoiceLine, PaymentReceived
 from .purchase import Bill, BillLine, PaymentMade
 from .sequence import DocumentSequence
 from .audit import AuditLog
-# --- Modul distribusi ASF (baru) ---
+# --- Modul distribusi ASF ---
 from .courier import CourierExpense
 from .orders import PurchaseOrder, POLine, SalesOrder, SOLine
+# --- Modul keuangan lanjutan (step 2-3) ---
+from .investor import Investor, InvestorPayout
+from .expense import Expense, EmployeeLoan
 
 __all__ = [
     "Base", "Company", "Warehouse", "User", "Role", "UserRole",
@@ -21,7 +24,8 @@ __all__ = [
     "StockMovement", "Journal", "JournalEntry", "Invoice", "InvoiceLine",
     "PaymentReceived", "Bill", "BillLine", "PaymentMade",
     "DocumentSequence", "AuditLog",
-    # baru
     "CourierExpense",
     "PurchaseOrder", "POLine", "SalesOrder", "SOLine",
+    "Investor", "InvestorPayout",
+    "Expense", "EmployeeLoan",
 ]

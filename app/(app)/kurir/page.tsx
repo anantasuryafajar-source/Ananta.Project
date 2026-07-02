@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
-import { Plus } from "lucide-react";
+import { useEffect, useState, useRef, type FormEvent } from "react";
+import { Plus, Upload } from "lucide-react";
 import { api } from "@/lib/api";
 import { rupiah, tanggal } from "@/lib/format";
 import { Topbar } from "@/components/ananta/topbar";
@@ -27,6 +27,49 @@ export default function KurirPage() {
   const [form, setForm] = useState({ ...KOSONG });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  // Parse CSV sederhana: header wajib -> date,courier_name,amount[,invoice_number,supplier_share,note]
+  async function handleCsv(file: File) {
+    setImportMsg(null); setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      if (lines.length < 2) throw new Error("CSV kosong atau tanpa data.");
+      const split = (l: string) => l.split(/[,;]/).map((c) => c.replace(/^"|"$/g, "").trim());
+      const header = split(lines[0]).map((h) => h.toLowerCase());
+      const idx = (name: string) => header.indexOf(name);
+      if (idx("date") < 0 || idx("courier_name") < 0 || idx("amount") < 0) {
+        throw new Error("Header wajib: date, courier_name, amount (opsional: invoice_number, supplier_share, note).");
+      }
+      const rows = lines.slice(1).map((l) => {
+        const c = split(l);
+        const get = (n: string) => (idx(n) >= 0 ? c[idx(n)] ?? "" : "");
+        return {
+          date: get("date"), courier_name: get("courier_name"), amount: get("amount"),
+          invoice_number: get("invoice_number") || null,
+          supplier_share: get("supplier_share") || null,
+          note: get("note") || null,
+        };
+      });
+      const res = await api<{ created: number; failed: { row: number; reason: string }[] }>(
+        "/courier-expenses/import",
+        { method: "POST", body: JSON.stringify({ rows }) },
+      );
+      const failNote = res.failed.length
+        ? ` Gagal ${res.failed.length} baris (baris ${res.failed.map((f) => f.row).join(", ")}: ${res.failed[0].reason}${res.failed.length > 1 ? " …" : ""})`
+        : "";
+      setImportMsg(`Import selesai: ${res.created} baris masuk.${failNote}`);
+      muat();
+    } catch (err) {
+      setImportMsg(err instanceof Error ? err.message : "Gagal import CSV.");
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   function muat() {
     api<Courier[]>("/courier-expenses").then(setItems).catch((e) => setError(e.message));
@@ -70,9 +113,15 @@ export default function KurirPage() {
     <>
       <Topbar title="Kurir & Ongkir" />
       <div className="p-6">
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex items-center justify-end gap-2">
+          <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsv(f); }} />
+          <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
+            <Upload size={16} /> {importing ? "Mengimpor…" : "Import CSV"}
+          </Button>
           <Button onClick={buka}><Plus size={16} /> Catat Ongkir</Button>
         </div>
+        {importMsg && <Card className="mb-4"><p className="text-sm text-ink-muted">{importMsg}</p></Card>}
 
         {error && <Card><p className="text-sm text-danger">{error}</p></Card>}
         {items?.length === 0 && (

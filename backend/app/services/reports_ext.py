@@ -198,3 +198,103 @@ async def gpm(db: AsyncSession, company_id: str, start: date, end: date) -> dict
                   for k, v in by_cust.items()]
     cust_items.sort(key=lambda x: Decimal(x["margin"]), reverse=True)
     return {"by_sku": sku_items, "by_customer": cust_items}
+
+
+# ------------------------------------------------------------ KARTU PIUTANG (statement)
+async def customer_statement(db: AsyncSession, company_id: str, contact_id: str) -> dict:
+    """Kartu piutang per customer: faktur & pembayaran berurutan + saldo berjalan."""
+    from ..models import PaymentReceived, Contact
+    contact = (await db.execute(
+        select(Contact.name).where(Contact.id == contact_id,
+                                   Contact.company_id == company_id)
+    )).scalar_one_or_none()
+    if contact is None:
+        return {"customer": None, "entries": [], "balance": "0"}
+
+    inv_rows = (await db.execute(
+        select(Invoice.number, Invoice.date, Invoice.total)
+        .where(Invoice.company_id == company_id,
+               Invoice.contact_id == contact_id,
+               Invoice.status.in_(("posted", "paid", "overdue")))
+    )).all()
+    pay_rows = (await db.execute(
+        select(PaymentReceived.number, PaymentReceived.date, PaymentReceived.amount)
+        .join(Invoice, Invoice.id == PaymentReceived.invoice_id)
+        .where(PaymentReceived.company_id == company_id,
+               Invoice.contact_id == contact_id)
+    )).all()
+
+    entries = (
+        [{"date": d, "ref": n, "type": "Faktur", "debit": Decimal(str(t or 0)),
+          "credit": Decimal("0")} for n, d, t in inv_rows]
+        + [{"date": d, "ref": n, "type": "Pembayaran", "debit": Decimal("0"),
+            "credit": Decimal(str(a or 0))} for n, d, a in pay_rows]
+    )
+    entries.sort(key=lambda e: (e["date"], e["type"]))
+    bal = Decimal("0")
+    out = []
+    for e in entries:
+        bal += e["debit"] - e["credit"]
+        out.append({"date": str(e["date"]), "ref": e["ref"], "type": e["type"],
+                    "debit": _f(e["debit"]), "credit": _f(e["credit"]),
+                    "balance": _f(bal)})
+    return {"customer": contact, "entries": out, "balance": _f(bal)}
+
+
+# ------------------------------------------------------------ KPI SALES
+async def sales_kpi(db: AsyncSession, company_id: str, start: date, end: date) -> dict:
+    """Kinerja per sales (user pembuat faktur): jumlah faktur, omzet, terbayar."""
+    from ..models import User
+    rows = (await db.execute(
+        select(User.full_name, Invoice.total, Invoice.paid_total)
+        .join(User, User.id == Invoice.created_by, isouter=True)
+        .where(Invoice.company_id == company_id,
+               Invoice.status.in_(("posted", "paid", "overdue")),
+               Invoice.date >= start, Invoice.date <= end)
+    )).all()
+    agg: dict[str, dict] = {}
+    for name, total, paid in rows:
+        key = name or "(tanpa user)"
+        a = agg.setdefault(key, {"count": 0, "omzet": Decimal("0"),
+                                 "paid": Decimal("0")})
+        a["count"] += 1
+        a["omzet"] += Decimal(str(total or 0))
+        a["paid"] += Decimal(str(paid or 0))
+    items = [{"sales": k, "invoices": v["count"], "omzet": _f(v["omzet"]),
+              "paid": _f(v["paid"]),
+              "collection_pct": round(float(v["paid"] / v["omzet"] * 100), 1)
+              if v["omzet"] > 0 else None}
+             for k, v in agg.items()]
+    items.sort(key=lambda x: Decimal(x["omzet"]), reverse=True)
+    return {"items": items}
+
+
+# ------------------------------------------------------------ PPN / PPh RINGKAS
+async def tax_summary(db: AsyncSession, company_id: str, start: date, end: date) -> dict:
+    """Ringkasan pajak per bulan: PPN keluaran (faktur jual) vs PPN masukan (bill)."""
+    from ..models import Bill
+    out_rows = (await db.execute(
+        select(Invoice.date, Invoice.tax_total)
+        .where(Invoice.company_id == company_id,
+               Invoice.status.in_(("posted", "paid", "overdue")),
+               Invoice.date >= start, Invoice.date <= end)
+    )).all()
+    in_rows = (await db.execute(
+        select(Bill.date, Bill.tax_total)
+        .where(Bill.company_id == company_id,
+               Bill.date >= start, Bill.date <= end)
+    )).all()
+    agg: dict[str, dict] = {}
+    for d, t in out_rows:
+        a = agg.setdefault(d.strftime("%Y-%m"), {"out": Decimal("0"), "in": Decimal("0")})
+        a["out"] += Decimal(str(t or 0))
+    for d, t in in_rows:
+        a = agg.setdefault(d.strftime("%Y-%m"), {"out": Decimal("0"), "in": Decimal("0")})
+        a["in"] += Decimal(str(t or 0))
+    months = [{"month": k, "vat_out": _f(v["out"]), "vat_in": _f(v["in"]),
+               "net_payable": _f(v["out"] - v["in"])}
+              for k, v in sorted(agg.items())]
+    tot_out = sum((Decimal(m["vat_out"]) for m in months), Decimal("0"))
+    tot_in = sum((Decimal(m["vat_in"]) for m in months), Decimal("0"))
+    return {"months": months, "total_vat_out": _f(tot_out),
+            "total_vat_in": _f(tot_in), "net_payable": _f(tot_out - tot_in)}

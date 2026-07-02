@@ -75,3 +75,76 @@ async def courier_report(
             "company_share": str(e.company_share), "supplier_share": str(e.supplier_share),
         } for e, inv in rows],
     }
+
+
+# ============================= IMPORT CSV =============================
+from pydantic import BaseModel
+from decimal import Decimal, InvalidOperation
+
+
+class CourierCsvRow(BaseModel):
+    date: str                       # YYYY-MM-DD
+    courier_name: str
+    amount: str                     # angka (boleh dengan pemisah ribuan)
+    invoice_number: str | None = None
+    supplier_share: str | None = None
+    note: str | None = None
+
+
+class CourierImportIn(BaseModel):
+    rows: list[CourierCsvRow]
+
+
+def _clean_num(v: str | None) -> Decimal:
+    if not v:
+        return Decimal("0")
+    s = str(v).replace("Rp", "").replace(".", "").replace(",", ".").strip()
+    # kalau format sudah 1234.56 (titik desimal), pembersihan di atas bisa salah;
+    # coba parse langsung dulu.
+    try:
+        return Decimal(str(v).replace(",", "").strip())
+    except InvalidOperation:
+        try:
+            return Decimal(s)
+        except InvalidOperation:
+            raise ValueError(f"Nominal tidak valid: {v}")
+
+
+@router.post("/import")
+async def import_courier_csv(
+    body: CourierImportIn,
+    user: User = Depends(require_roles("finance", "warehouse")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import massal pengeluaran kurir (hasil parse CSV di frontend).
+    Tiap baris dibuat sebagai courier expense + jurnal. Baris gagal dilaporkan,
+    baris lain tetap diproses."""
+    created = 0
+    failed: list[dict] = []
+    for i, row in enumerate(body.rows, start=1):
+        try:
+            inv_id = None
+            if row.invoice_number:
+                inv_id = (await db.execute(
+                    select(Invoice.id).where(
+                        Invoice.company_id == user.company_id,
+                        Invoice.number == row.invoice_number.strip())
+                )).scalar_one_or_none()
+                if inv_id is None:
+                    raise ValueError(f"Faktur {row.invoice_number} tidak ditemukan.")
+            amount = _clean_num(row.amount)
+            share = _clean_num(row.supplier_share)
+            await create_courier_expense(
+                db, company_id=user.company_id, user_id=user.id,
+                on_date=date.fromisoformat(row.date.strip()),
+                courier_name=row.courier_name.strip() or "(tanpa nama)",
+                amount=amount, invoice_id=inv_id, supplier_id=None,
+                supplier_share=share, paid_account_code="1-1000",
+                note=row.note,
+            )
+            await db.commit()
+            created += 1
+        except Exception as e:
+            await db.rollback()
+            failed.append({"row": i, "reason": str(e)})
+    return {"created": created, "failed": failed}

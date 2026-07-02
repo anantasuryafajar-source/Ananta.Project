@@ -17,10 +17,14 @@ type Quarterly = { items: { quarter: string; omzet: string; hpp: string; gross_p
 type ArLimit = { items: { customer: string; outstanding: string; credit_limit: string; ratio: number | null; status: string }[]; total_outstanding: string };
 type Commission = { rate: number; items: { sku: string; name: string; qty: string; revenue: string; margin: string; commission: string }[]; total_commission: string };
 
-const TABS = ["Laba Rugi", "Arus Kas", "Rekap Kuartal", "AR Aging", "AR Limit", "Komisi", "GPM", "Valuasi Stok"] as const;
+const TABS = ["Laba Rugi", "Arus Kas", "Rekap Kuartal", "AR Aging", "AR Limit", "Komisi", "GPM", "Valuasi Stok", "Kartu Piutang", "KPI Sales", "PPN/PPh"] as const;
 type Tab = (typeof TABS)[number];
-const withDate = new Set<Tab>(["Laba Rugi", "Arus Kas", "Komisi", "GPM"]);
+const withDate = new Set<Tab>(["Laba Rugi", "Arus Kas", "Komisi", "GPM", "KPI Sales", "PPN/PPh"]);
 type Gpm = { by_sku: { sku: string; name: string; revenue: string; margin: string; gpm: number | null }[]; by_customer: { customer: string; revenue: string; margin: string; gpm: number | null }[] };
+type Statement = { customer: string | null; entries: { date: string; ref: string; type: string; debit: string; credit: string; balance: string }[]; balance: string };
+type SalesKpi = { items: { sales: string; invoices: number; omzet: string; paid: string; collection_pct: number | null }[] };
+type TaxSummary = { months: { month: string; vat_out: string; vat_in: string; net_payable: string }[]; total_vat_out: string; total_vat_in: string; net_payable: string };
+type ContactOpt = { id: string; name: string };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
@@ -33,8 +37,22 @@ export default function LaporanPage() {
   const [dataTab, setDataTab] = useState<Tab | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [contacts, setContacts] = useState<ContactOpt[]>([]);
+  const [contactId, setContactId] = useState("");
+
+  // daftar customer untuk Kartu Piutang (dimuat sekali saat tab dibuka)
+  useEffect(() => {
+    if (tab === "Kartu Piutang" && contacts.length === 0) {
+      api<ContactOpt[]>("/contacts?type=customer").then(setContacts).catch(() => {});
+    }
+  }, [tab, contacts.length]);
 
   const load = useCallback(async () => {
+    // Kartu Piutang butuh customer dipilih dulu
+    if (tab === "Kartu Piutang" && !contactId) {
+      setErr(null); setLoading(false); setData(null); setDataTab(null);
+      return;
+    }
     setErr(null); setLoading(true); setData(null); setDataTab(null);
     try {
       const url: Record<Tab, string> = {
@@ -46,13 +64,16 @@ export default function LaporanPage() {
         "Komisi": `/reports/commission?start=${start}&end=${end}`,
         "GPM": `/reports/gpm?start=${start}&end=${end}`,
         "Valuasi Stok": `/reports/stock-valuation`,
+        "Kartu Piutang": `/reports/customer-statement?contact_id=${contactId}`,
+        "KPI Sales": `/reports/sales-kpi?start=${start}&end=${end}`,
+        "PPN/PPh": `/reports/tax-summary?start=${start}&end=${end}`,
       };
       setData(await api<any>(url[tab]));
       setDataTab(tab);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Gagal memuat laporan.");
     } finally { setLoading(false); }
-  }, [tab, start, end]);
+  }, [tab, start, end, contactId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -68,6 +89,13 @@ export default function LaporanPage() {
             </button>
           ))}
           <div className="ml-auto flex items-center gap-2 text-sm text-ink-muted">
+            {tab === "Kartu Piutang" && (
+              <select value={contactId} onChange={(e) => setContactId(e.target.value)}
+                className="rounded-[var(--radius-input)] border border-line bg-surface px-2 py-1">
+                <option value="">— pilih customer —</option>
+                {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            )}
             {withDate.has(tab) && (
               <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-[var(--radius-input)] border border-line bg-surface px-2 py-1" />
             )}
@@ -96,6 +124,12 @@ export default function LaporanPage() {
         {!loading && data && dataTab === tab && tab === "Komisi" && <CommissionView c={data as Commission} />}
         {!loading && data && dataTab === tab && tab === "GPM" && <GpmView g={data as Gpm} />}
         {!loading && data && dataTab === tab && tab === "Valuasi Stok" && <StockVal stock={data as Stock} />}
+        {!loading && tab === "Kartu Piutang" && !contactId && (
+          <Card className="text-sm text-ink-muted">Pilih customer di kanan atas untuk melihat kartu piutangnya.</Card>
+        )}
+        {!loading && data && dataTab === tab && tab === "Kartu Piutang" && <StatementView s={data as Statement} />}
+        {!loading && data && dataTab === tab && tab === "KPI Sales" && <SalesKpiView k={data as SalesKpi} />}
+        {!loading && data && dataTab === tab && tab === "PPN/PPh" && <TaxView t={data as TaxSummary} />}
       </div>
     </>
   );
@@ -438,6 +472,15 @@ function tableFor(tab: string, data: any): Tabular {
     case "Valuasi Stok":
       return { title: "Valuasi Stok", headers: ["SKU", "Nama", "Qty", "Avg Cost", "Nilai"],
         rows: (data.items ?? []).map((i: any) => [i.sku, i.name, i.quantity, i.avg_cost, i.value]) };
+    case "Kartu Piutang":
+      return { title: `Kartu Piutang ${data.customer ?? ""}`.trim(), headers: ["Tanggal", "Ref", "Jenis", "Debit", "Kredit", "Saldo"],
+        rows: (data.entries ?? []).map((e: any) => [e.date, e.ref, e.type, e.debit, e.credit, e.balance]) };
+    case "KPI Sales":
+      return { title: "KPI Sales", headers: ["Sales", "Faktur", "Omzet", "Terbayar", "Kolektibilitas %"],
+        rows: (data.items ?? []).map((i: any) => [i.sales, i.invoices, i.omzet, i.paid, i.collection_pct ?? ""]) };
+    case "PPN/PPh":
+      return { title: "Ringkasan PPN", headers: ["Bulan", "PPN Keluaran", "PPN Masukan", "Kurang/Lebih Bayar"],
+        rows: (data.months ?? []).map((m: any) => [m.month, m.vat_out, m.vat_in, m.net_payable]) };
     default:
       return { title: tab, headers: [], rows: [] };
   }
@@ -477,4 +520,82 @@ function printReport(tab: string, data: any) {
     <script>window.onload=function(){window.print()}</script>
     </body></html>`);
   w.document.close();
+}
+
+/* ---------- Kartu Piutang ---------- */
+function StatementView({ s }: { s: Statement }) {
+  return (
+    <Card>
+      <div className="mb-2 flex justify-between text-sm">
+        <span className="font-medium text-ink">Kartu Piutang — {s.customer ?? "?"}</span>
+        <span className="tabular-nums text-ink">Saldo: {rupiah(s.balance)}</span>
+      </div>
+      <table className="w-full text-sm">
+        <thead><tr className="text-left text-caption uppercase text-ink-subtle">
+          <th className="py-1">Tanggal</th><th>Ref</th><th>Jenis</th>
+          <th className="text-right">Debit</th><th className="text-right">Kredit</th><th className="text-right">Saldo</th>
+        </tr></thead>
+        <tbody>
+          {s.entries.map((e, i) => (
+            <tr key={i} className="border-t border-line">
+              <td className="py-1 text-ink-muted">{e.date}</td>
+              <td className="text-ink">{e.ref}</td>
+              <td className="text-ink-muted">{e.type}</td>
+              <td className="text-right tabular-nums text-ink">{Number(e.debit) > 0 ? rupiah(e.debit) : "—"}</td>
+              <td className="text-right tabular-nums text-success">{Number(e.credit) > 0 ? rupiah(e.credit) : "—"}</td>
+              <td className="text-right tabular-nums text-ink">{rupiah(e.balance)}</td>
+            </tr>
+          ))}
+          {s.entries.length === 0 && <tr><td colSpan={6} className="py-3 text-center text-ink-subtle">Belum ada transaksi untuk customer ini.</td></tr>}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+/* ---------- KPI Sales ---------- */
+function SalesKpiView({ k }: { k: SalesKpi }) {
+  return (
+    <Card>
+      <p className="mb-2 text-sm font-medium text-ink">Kinerja per Sales</p>
+      <table className="w-full text-sm">
+        <thead><tr className="text-left text-caption uppercase text-ink-subtle">
+          <th className="py-1">Sales</th><th className="text-right">Faktur</th>
+          <th className="text-right">Omzet</th><th className="text-right">Terbayar</th><th className="text-right">Kolektibilitas</th>
+        </tr></thead>
+        <tbody>
+          {k.items.map((r) => (
+            <tr key={r.sales} className="border-t border-line">
+              <td className="py-1 text-ink">{r.sales}</td>
+              <td className="text-right tabular-nums text-ink-muted">{r.invoices}</td>
+              <td className="text-right tabular-nums text-ink">{rupiah(r.omzet)}</td>
+              <td className="text-right tabular-nums text-success">{rupiah(r.paid)}</td>
+              <td className="text-right tabular-nums text-ink-muted">{r.collection_pct != null ? `${r.collection_pct}%` : "—"}</td>
+            </tr>
+          ))}
+          {k.items.length === 0 && <tr><td colSpan={5} className="py-3 text-center text-ink-subtle">Belum ada penjualan pada periode ini.</td></tr>}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+/* ---------- PPN / PPh ---------- */
+function TaxView({ t }: { t: TaxSummary }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="PPN Keluaran" value={t.total_vat_out} tone="text-ink" />
+        <Stat label="PPN Masukan" value={t.total_vat_in} tone="text-ink" />
+        <Stat label="Kurang/Lebih Bayar" value={t.net_payable} tone={Number(t.net_payable) >= 0 ? "text-danger" : "text-success"} />
+      </div>
+      <Card>
+        <p className="mb-2 text-sm font-medium text-ink">PPN per bulan</p>
+        <SimpleTable head={["Bulan", "PPN Keluaran", "PPN Masukan", "Kurang/Lebih Bayar"]}
+          rows={t.months.map((m) => [m.month, rupiah(m.vat_out), rupiah(m.vat_in), rupiah(m.net_payable)])}
+          empty="Belum ada transaksi berpajak pada periode ini." />
+        <p className="mt-3 text-caption text-ink-subtle">Catatan: ringkasan dari tax_total faktur & bill (bukan pengganti SPT/Coretax).</p>
+      </Card>
+    </div>
+  );
 }

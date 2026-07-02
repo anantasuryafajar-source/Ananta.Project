@@ -46,3 +46,27 @@ async def gpm(
     user: User = Depends(current_user), db: AsyncSession = Depends(get_db),
 ):
     return await reports_ext.gpm(db, user.company_id, start, end)
+
+
+@router.get("/customer-statement")
+async def customer_statement(
+    contact_id: str = Query(...),
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db),
+):
+    return await reports_ext.customer_statement(db, user.company_id, contact_id)
+
+
+@router.get("/sales-kpi")
+async def sales_kpi(
+    start: date = Query(...), end: date = Query(...),
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db),
+):
+    return await reports_ext.sales_kpi(db, user.company_id, start, end)
+
+
+@router.get("/tax-summary")
+async def tax_summary(
+    start: date = Query(...), end: date = Query(...),
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db),
+):
+    return await reports_ext.tax_summary(db, user.company_id, start, end)
