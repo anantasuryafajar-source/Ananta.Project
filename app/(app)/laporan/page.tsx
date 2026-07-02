@@ -6,6 +6,7 @@ import {
 import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
 import { api } from "@/lib/api";
+import { exportXLSX } from "@/lib/excel";
 import { rupiah } from "@/lib/format";
 
 type Row = { code?: string; name: string; amount: string };
@@ -102,9 +103,9 @@ export default function LaporanPage() {
             {(withDate.has(tab) || tab === "AR Aging") && (
               <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded-[var(--radius-input)] border border-line bg-surface px-2 py-1" />
             )}
-            <button onClick={() => exportCSV(tab, data)} disabled={!data || dataTab !== tab}
+            <button onClick={() => exportExcel(tab, data)} disabled={!data || dataTab !== tab}
               className="rounded-[var(--radius-input)] border border-line bg-surface px-3 py-1 text-ink-muted transition-colors hover:text-ink disabled:opacity-40">
-              Ekspor CSV
+              Ekspor Excel
             </button>
             <button onClick={() => printReport(tab, data)} disabled={!data || dataTab !== tab}
               className="rounded-[var(--radius-input)] border border-line bg-surface px-3 py-1 text-ink-muted transition-colors hover:text-ink disabled:opacity-40">
@@ -439,7 +440,7 @@ function GpmView({ g }: { g: Gpm }) {
   );
 }
 
-/* ---------- Ekspor CSV & Cetak/PDF ---------- */
+/* ---------- Ekspor Excel & Cetak/PDF ---------- */
 type Tabular = { title: string; headers: string[]; rows: (string | number)[][] };
 
 function tableFor(tab: string, data: any): Tabular {
@@ -486,18 +487,10 @@ function tableFor(tab: string, data: any): Tabular {
   }
 }
 
-function exportCSV(tab: string, data: any) {
+function exportExcel(tab: string, data: any) {
   if (!data) return;
   const t = tableFor(tab, data);
-  const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const csv = [t.headers, ...t.rows].map((r) => r.map(esc).join(",")).join("\r\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${t.title.replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  exportXLSX(t.title, t.headers, t.rows);
 }
 
 function printReport(tab: string, data: any) {

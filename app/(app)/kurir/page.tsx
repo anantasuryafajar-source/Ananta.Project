@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, type FormEvent } from "react";
 import { Plus, Upload } from "lucide-react";
 import { api } from "@/lib/api";
+import { readSheet } from "@/lib/excel";
 import { rupiah, tanggal } from "@/lib/format";
 import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
@@ -35,25 +36,18 @@ export default function KurirPage() {
   async function handleCsv(file: File) {
     setImportMsg(null); setImporting(true);
     try {
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      if (lines.length < 2) throw new Error("CSV kosong atau tanpa data.");
-      const split = (l: string) => l.split(/[,;]/).map((c) => c.replace(/^"|"$/g, "").trim());
-      const header = split(lines[0]).map((h) => h.toLowerCase());
-      const idx = (name: string) => header.indexOf(name);
-      if (idx("date") < 0 || idx("courier_name") < 0 || idx("amount") < 0) {
-        throw new Error("Header wajib: date, courier_name, amount (opsional: invoice_number, supplier_share, note).");
+      const parsed = await readSheet(file);
+      if (parsed.length === 0) throw new Error("File kosong atau tanpa data.");
+      const first = parsed[0];
+      if (!("date" in first) || !("courier_name" in first) || !("amount" in first)) {
+        throw new Error("Kolom wajib: date, courier_name, amount (opsional: invoice_number, supplier_share, note).");
       }
-      const rows = lines.slice(1).map((l) => {
-        const c = split(l);
-        const get = (n: string) => (idx(n) >= 0 ? c[idx(n)] ?? "" : "");
-        return {
-          date: get("date"), courier_name: get("courier_name"), amount: get("amount"),
-          invoice_number: get("invoice_number") || null,
-          supplier_share: get("supplier_share") || null,
-          note: get("note") || null,
-        };
-      });
+      const rows = parsed.map((r) => ({
+        date: r.date, courier_name: r.courier_name, amount: r.amount,
+        invoice_number: r.invoice_number || null,
+        supplier_share: r.supplier_share || null,
+        note: r.note || null,
+      }));
       const res = await api<{ created: number; failed: { row: number; reason: string }[] }>(
         "/courier-expenses/import",
         { method: "POST", body: JSON.stringify({ rows }) },
@@ -64,7 +58,7 @@ export default function KurirPage() {
       setImportMsg(`Import selesai: ${res.created} baris masuk.${failNote}`);
       muat();
     } catch (err) {
-      setImportMsg(err instanceof Error ? err.message : "Gagal import CSV.");
+      setImportMsg(err instanceof Error ? err.message : "Gagal import file.");
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -114,10 +108,10 @@ export default function KurirPage() {
       <Topbar title="Kurir & Ongkir" />
       <div className="p-6">
         <div className="mb-4 flex items-center justify-end gap-2">
-          <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsv(f); }} />
           <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
-            <Upload size={16} /> {importing ? "Mengimpor…" : "Import CSV"}
+            <Upload size={16} /> {importing ? "Mengimpor…" : "Import Excel/CSV"}
           </Button>
           <Button onClick={buka}><Plus size={16} /> Catat Ongkir</Button>
         </div>

@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
-import { Plus } from "lucide-react";
+import { useEffect, useState, useRef, type FormEvent } from "react";
+import { Plus, Upload } from "lucide-react";
 import { api } from "@/lib/api";
+import { readSheet } from "@/lib/excel";
 import { rupiah } from "@/lib/format";
 import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
@@ -30,6 +31,33 @@ export default function ProdukPage() {
   const [form, setForm] = useState({ ...KOSONG });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+
+  async function handleImport(file: File) {
+    setImportMsg(null); setImporting(true);
+    try {
+      const rows = await readSheet(file);
+      if (rows.length === 0) throw new Error("File kosong atau tanpa data.");
+      const first = rows[0];
+      for (const col of ["sku", "name"]) {
+        if (!(col in first)) throw new Error(`Kolom wajib: ${["sku", "name"].join(", ")}.`);
+      }
+      const res = await api<{ created: number; updated: number; failed: { row: number; reason: string }[] }>(
+        "/products/import", { method: "POST", body: JSON.stringify({ rows }) });
+      const failNote = res.failed.length
+        ? ` Gagal ${res.failed.length} baris (baris ${res.failed[0].row}: ${res.failed[0].reason}${res.failed.length > 1 ? " …" : ""})`
+        : "";
+      setImportMsg(`Import selesai: ${res.created} baru, ${res.updated} diperbarui.${failNote}`);
+      muat();
+    } catch (err) {
+      setImportMsg(err instanceof Error ? err.message : "Gagal import file.");
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   function muat() {
     api<Product[]>("/products").then(setItems).catch((e) => setError(e.message));
@@ -74,11 +102,17 @@ export default function ProdukPage() {
     <>
       <Topbar title="Produk & Stok" />
       <div className="p-6">
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex items-center justify-end gap-2">
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImport(f); }} />
+          <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
+            <Upload size={16} /> {importing ? "Mengimpor…" : "Import Excel"}
+          </Button>
           <Button onClick={() => setOpen(true)}>
             <Plus size={16} /> Tambah Produk
           </Button>
         </div>
+        {importMsg && <Card className="mb-4"><p className="text-sm text-ink-muted">{importMsg}</p></Card>}
 
         {error && <Card><p className="text-sm text-danger">{error}</p></Card>}
         {items && (

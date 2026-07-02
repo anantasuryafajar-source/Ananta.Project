@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Printer, Truck, Search } from "lucide-react";
 import { api } from "@/lib/api";
+import { printInvoiceDoc, printDeliveryNote, type InvoiceDetail, type CompanyInfo } from "@/lib/print";
 import { rupiah, tanggal } from "@/lib/format";
 import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
@@ -53,11 +54,41 @@ export default function PenjualanPage() {
   const [lines, setLines] = useState<Line[]>([baris()]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [printing, setPrinting] = useState<string | null>(null);
+  const PAGE = 50;
 
-  function muat() {
-    api<Invoice[]>("/invoices").then(setItems).catch((e) => setError(e.message));
+  async function muat(reset = true, query = q) {
+    try {
+      const offset = reset ? 0 : (items?.length ?? 0);
+      const res = await api<Invoice[]>(
+        `/invoices?limit=${PAGE}&offset=${offset}${query ? `&q=${encodeURIComponent(query)}` : ""}`);
+      setItems((prev) => (reset || !prev ? res : [...prev, ...res]));
+      setHasMore(res.length === PAGE);
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal memuat."); }
   }
-  useEffect(muat, []);
+  useEffect(() => { muat(true, ""); }, []);
+
+  async function muatLagi() {
+    setLoadingMore(true);
+    await muat(false);
+    setLoadingMore(false);
+  }
+
+  async function cetak(id: string, mode: "faktur" | "sj") {
+    setPrinting(id + mode);
+    try {
+      const [detail, co] = await Promise.all([
+        api<InvoiceDetail>(`/invoices/${id}/detail`),
+        api<CompanyInfo>("/settings/company"),
+      ]);
+      if (mode === "faktur") printInvoiceDoc(detail, co);
+      else printDeliveryNote(detail, co);
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal menyiapkan dokumen."); }
+    finally { setPrinting(null); }
+  }
 
   function bukaForm() {
     setFormError(null);
@@ -118,7 +149,15 @@ export default function PenjualanPage() {
     <>
       <Topbar title="Penjualan" />
       <div className="p-6">
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 rounded-[var(--radius-input)] border border-line bg-surface px-3 py-1.5">
+            <Search size={15} className="text-ink-subtle" />
+            <input value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") muat(true); }}
+              placeholder="Cari no. faktur… (Enter)"
+              className="w-52 bg-transparent text-sm text-ink outline-none placeholder:text-ink-subtle" />
+          </div>
           <Button onClick={bukaForm}><Plus size={16} /> Buat Faktur</Button>
         </div>
 
@@ -138,6 +177,7 @@ export default function PenjualanPage() {
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 text-right font-medium">Total</th>
                 <th className="px-4 py-3 text-right font-medium">Terbayar</th>
+                <th className="px-4 py-3 text-right font-medium">Cetak</th>
               </tr></thead>
               <tbody>
                 {items.map((v) => (
@@ -147,11 +187,30 @@ export default function PenjualanPage() {
                     <td className={`px-4 py-3 capitalize ${STATUS[v.status] ?? "text-ink-muted"}`}>{v.status}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{rupiah(v.total)}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{rupiah(v.paid_total)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => cetak(v.id, "faktur")} disabled={printing === v.id + "faktur"}
+                          title="Cetak faktur" className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink disabled:opacity-40">
+                          <Printer size={15} />
+                        </button>
+                        <button onClick={() => cetak(v.id, "sj")} disabled={printing === v.id + "sj"}
+                          title="Cetak surat jalan" className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink disabled:opacity-40">
+                          <Truck size={15} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </Card>
+        )}
+        {hasMore && (
+          <div className="mt-3 flex justify-center">
+            <Button variant="secondary" onClick={muatLagi} disabled={loadingMore}>
+              {loadingMore ? "Memuat…" : "Muat lebih banyak"}
+            </Button>
+          </div>
         )}
       </div>
 
