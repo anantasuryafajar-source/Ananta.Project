@@ -1,0 +1,42 @@
+name: Backup Database Harian
+
+# Kapan backup jalan:
+on:
+  schedule:
+    # Tiap hari 17:00 UTC = 00:00 WIB (tengah malam Indonesia Barat).
+    # Format cron: menit jam * * *
+    - cron: "0 17 * * *"
+  workflow_dispatch:   # tombol "Run workflow" untuk jalankan manual kapan saja
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil kode repo
+        uses: actions/checkout@v4
+
+      - name: Pasang PostgreSQL client (pg_dump v16)
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Buat file backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          mkdir -p backups
+          STAMP=$(date +%Y-%m-%d-%H%M)
+          FILE="backups/ananta-${STAMP}.dump"
+          echo "Membuat backup: ${FILE}"
+          pg_dump "${DATABASE_URL}" -Fc -f "${FILE}"
+          ls -lh "${FILE}"
+          echo "STAMP=${STAMP}" >> "$GITHUB_ENV"
+
+      - name: Unggah backup sebagai artifact (tersimpan 30 hari)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ananta-backup-${{ env.STAMP }}
+          path: backups/*.dump
+          retention-days: 30
