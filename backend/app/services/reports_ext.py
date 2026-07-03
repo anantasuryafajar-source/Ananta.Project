@@ -160,9 +160,13 @@ async def quarterly_recap(db: AsyncSession, company_id: str) -> dict:
             a["omzet"] += Decimal(str(cred or 0)) - Decimal(str(deb or 0))
         elif code == "5-1000":    # HPP: normal debit
             a["hpp"] += Decimal(str(deb or 0)) - Decimal(str(cred or 0))
+    def _sortkey(q):
+        # q = "Q{n}-{yy}" -> (yyyy, n) untuk urutan kronologis
+        qn, yy = q[1:].split("-")
+        return (2000 + int(yy), int(qn))
     items = [{"quarter": k, "omzet": _f(v["omzet"]), "hpp": _f(v["hpp"]),
               "gross_profit": _f(v["omzet"] - v["hpp"])}
-             for k, v in sorted(agg.items())]
+             for k, v in sorted(agg.items(), key=lambda kv: _sortkey(kv[0]))]
     return {"items": items}
 
 

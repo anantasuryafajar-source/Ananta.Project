@@ -37,16 +37,29 @@ async def summary(
     SOLD = ("posted", "paid", "overdue")
 
     # ---- KPI utama ----
-    revenue = (await db.execute(
-        select(func.coalesce(func.sum(Invoice.subtotal), 0))
-        .where(Invoice.company_id == cid, Invoice.status.in_(SOLD),
-               Invoice.date >= m0)
-    )).scalar_one()
-    revenue_prev = (await db.execute(
-        select(func.coalesce(func.sum(Invoice.subtotal), 0))
-        .where(Invoice.company_id == cid, Invoice.status.in_(SOLD),
-               Invoice.date >= m_prev, Invoice.date < m0)
-    )).scalar_one()
+    # Omzet dihitung dari JURNAL akun 4-1000 (Penjualan) agar histori
+    # (jurnal ringkasan) maupun faktur baru dua-duanya terhitung.
+    sales_acc_id = (await db.execute(
+        select(Account.id).where(Account.company_id == cid,
+                                 Account.code == "4-1000")
+    )).scalar_one_or_none()
+
+    async def _sales_between(d_start, d_end):
+        if not sales_acc_id:
+            return Decimal("0")
+        deb, cred = (await db.execute(
+            select(func.coalesce(func.sum(JournalEntry.debit), 0),
+                   func.coalesce(func.sum(JournalEntry.credit), 0))
+            .join(Journal, Journal.id == JournalEntry.journal_id)
+            .where(Journal.company_id == cid,
+                   JournalEntry.account_id == sales_acc_id,
+                   Journal.date >= d_start, Journal.date < d_end)
+        )).one()
+        return Decimal(str(cred)) - Decimal(str(deb))
+
+    next_m = (m0 + timedelta(days=32)).replace(day=1)
+    revenue = await _sales_between(m0, next_m)
+    revenue_prev = await _sales_between(m_prev, m0)
     receivable = (await db.execute(
         select(func.coalesce(func.sum(Invoice.total - Invoice.paid_total), 0))
         .where(Invoice.company_id == cid, Invoice.status.in_(OPEN))
@@ -83,21 +96,25 @@ async def summary(
     six_ago = (m0 - timedelta(days=1)).replace(day=1)
     for _ in range(4):
         six_ago = (six_ago - timedelta(days=1)).replace(day=1)
-    trend_rows = (await db.execute(
-        select(Invoice.date, Invoice.subtotal)
-        .where(Invoice.company_id == cid, Invoice.status.in_(SOLD),
-               Invoice.date >= six_ago)
-    )).all()
+    trend_rows = []
+    if sales_acc_id:
+        trend_rows = (await db.execute(
+            select(Journal.date, JournalEntry.debit, JournalEntry.credit)
+            .join(JournalEntry, JournalEntry.journal_id == Journal.id)
+            .where(Journal.company_id == cid,
+                   JournalEntry.account_id == sales_acc_id,
+                   Journal.date >= six_ago)
+        )).all()
     buckets: dict[str, Decimal] = {}
     cursor = six_ago
     while cursor <= m0:
         buckets[cursor.strftime("%Y-%m")] = Decimal("0")
         nxt = (cursor + timedelta(days=32)).replace(day=1)
         cursor = nxt
-    for d, sub in trend_rows:
+    for d, deb, cred in trend_rows:
         key = d.strftime("%Y-%m")
         if key in buckets:
-            buckets[key] += Decimal(str(sub or 0))
+            buckets[key] += Decimal(str(cred or 0)) - Decimal(str(deb or 0))
     trend = [{"month": k, "omzet": _s(v)} for k, v in sorted(buckets.items())]
 
     # ---- PERINGATAN ----
