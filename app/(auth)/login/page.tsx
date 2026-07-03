@@ -5,6 +5,7 @@ import Link from "next/link";
 import { login } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { ContinuityRibbon } from "@/components/ananta/continuity-ribbon";
 
 export default function LoginPage() {
@@ -42,10 +43,9 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="mb-1 block text-caption text-ink-muted">Kata sandi</label>
-            <Input
+            <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              type="password"
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
           </div>

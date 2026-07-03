@@ -35,7 +35,7 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <p className="px-5 py-4 text-caption text-ink-subtle">v0.9.0 · Calm Ledger</p>
+      <p className="px-5 py-4 text-caption text-ink-subtle">v0.9.1 · Calm Ledger</p>
     </aside>
   );
 }

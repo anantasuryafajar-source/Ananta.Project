@@ -6,6 +6,7 @@ import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Modal } from "@/components/ui/modal";
 import { Field, Textarea } from "@/components/ui/form";
 
@@ -301,7 +302,7 @@ export default function PengaturanPage() {
             <Field label="Email"><Input type="email" value={uf.email} onChange={(e) => setUf((f) => ({ ...f, email: e.target.value }))} required /></Field>
           </div>
           <Field label="Password" hint="Minimal 8 karakter">
-            <Input type="password" value={uf.password} onChange={(e) => setUf((f) => ({ ...f, password: e.target.value }))} required />
+            <PasswordInput value={uf.password} onChange={(e) => setUf((f) => ({ ...f, password: e.target.value }))} required />
           </Field>
           <Field label="Peran">
             <div className="flex flex-wrap gap-3 pt-1">
@@ -354,10 +355,10 @@ export default function PengaturanPage() {
           <p className="text-sm text-ink-muted">Kata sandi baru untuk <b className="text-ink">{resetUser?.email}</b>. Sampaikan ke pengguna secara langsung.</p>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Kata sandi baru" hint="Minimal 8 karakter">
-              <Input type="password" value={rp.new_password} onChange={(e) => setRp((f) => ({ ...f, new_password: e.target.value }))} required autoFocus />
+              <PasswordInput value={rp.new_password} onChange={(e) => setRp((f) => ({ ...f, new_password: e.target.value }))} required autoFocus />
             </Field>
             <Field label="Ulangi kata sandi">
-              <Input type="password" value={rp.confirm} onChange={(e) => setRp((f) => ({ ...f, confirm: e.target.value }))} required />
+              <PasswordInput value={rp.confirm} onChange={(e) => setRp((f) => ({ ...f, confirm: e.target.value }))} required />
             </Field>
           </div>
           {formError && <p className="text-sm text-danger">{formError}</p>}

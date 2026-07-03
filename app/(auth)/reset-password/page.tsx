@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 
 function ResetInner() {
   const router = useRouter();
@@ -55,12 +56,12 @@ function ResetInner() {
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-caption text-ink-muted">Kata sandi baru</label>
-              <Input value={pw} onChange={(e) => setPw(e.target.value)} type="password"
+              <PasswordInput value={pw} onChange={(e) => setPw(e.target.value)}
                 placeholder="Minimal 8 karakter" disabled={!token} />
             </div>
             <div>
               <label className="mb-1 block text-caption text-ink-muted">Ulangi kata sandi baru</label>
-              <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password"
+              <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submit()} disabled={!token} />
             </div>
             {error && <p className="text-sm text-danger">{error}</p>}

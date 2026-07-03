@@ -6,6 +6,7 @@ import { api, setToken } from "@/lib/api";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Field } from "@/components/ui/form";
 import { CommandPalette } from "@/components/ananta/command-palette";
 
@@ -102,16 +103,16 @@ export function Topbar({ title }: { title: string }) {
       <Modal open={openPw} onClose={() => setOpenPw(false)} title="Ganti Kata Sandi">
         <form onSubmit={simpanPw} className="space-y-4">
           <Field label="Kata sandi saat ini">
-            <Input type="password" value={pw.current_password}
+            <PasswordInput value={pw.current_password}
               onChange={(e) => setPw((f) => ({ ...f, current_password: e.target.value }))} required autoFocus />
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Kata sandi baru" hint="Minimal 8 karakter">
-              <Input type="password" value={pw.new_password}
+              <PasswordInput value={pw.new_password}
                 onChange={(e) => setPw((f) => ({ ...f, new_password: e.target.value }))} required />
             </Field>
             <Field label="Ulangi kata sandi baru">
-              <Input type="password" value={pw.confirm}
+              <PasswordInput value={pw.confirm}
                 onChange={(e) => setPw((f) => ({ ...f, confirm: e.target.value }))} required />
             </Field>
           </div>
