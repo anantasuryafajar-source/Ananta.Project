@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Search, KeyRound, LogOut } from "lucide-react";
+import { KeyRound, LogOut } from "lucide-react";
 import { api, setToken } from "@/lib/api";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/form";
+import { CommandPalette } from "@/components/ananta/command-palette";
 
 type Me = { full_name?: string; email?: string };
 
@@ -63,10 +64,7 @@ export function Topbar({ title }: { title: string }) {
     <header className="flex h-14 items-center justify-between border-b border-line bg-surface px-6">
       <h1 className="text-h3 font-semibold text-ink">{title}</h1>
       <div className="flex items-center gap-3">
-        <div className="hidden items-center gap-2 rounded-[var(--radius-input)] border border-line bg-surface-sunken px-3 py-1.5 text-ink-subtle md:flex">
-          <Search size={15} />
-          <span className="text-caption">Cari… (Ctrl+K)</span>
-        </div>
+        <CommandPalette />
 
         <div className="relative" ref={menuRef}>
           <button
