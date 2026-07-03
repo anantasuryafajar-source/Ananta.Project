@@ -131,24 +131,35 @@ async def commission(db: AsyncSession, company_id: str, start: date, end: date,
 
 # ------------------------------------------------------------ REKAP KUARTAL
 async def quarterly_recap(db: AsyncSession, company_id: str) -> dict:
-    """Omzet, HPP (perkiraan dari modal), dan margin per kuartal (mirip REKAPQUARTAL)."""
+    """Omzet & HPP per kuartal, dihitung dari JURNAL akun 4-1000 (Penjualan) &
+    5-1000 (HPP) — sehingga histori (jurnal ringkasan) maupun faktur baru
+    dua-duanya terhitung."""
+    from ..models import Account
+    accs = (await db.execute(
+        select(Account.id, Account.code).where(
+            Account.company_id == company_id,
+            Account.code.in_(("4-1000", "5-1000")))
+    )).all()
+    code_by_id = {i: c for i, c in accs}
+    if not code_by_id:
+        return {"items": []}
+
     rows = (await db.execute(
-        select(Invoice.date, Product.purchase_price,
-               InvoiceLine.quantity, InvoiceLine.unit_price, InvoiceLine.discount)
-        .join(InvoiceLine, InvoiceLine.invoice_id == Invoice.id)
-        .join(Product, Product.id == InvoiceLine.product_id, isouter=True)
-        .where(Invoice.company_id == company_id,
-               Invoice.status.in_(("posted", "paid", "overdue")))
+        select(Journal.date, JournalEntry.account_id,
+               JournalEntry.debit, JournalEntry.credit)
+        .join(JournalEntry, JournalEntry.journal_id == Journal.id)
+        .where(Journal.company_id == company_id,
+               JournalEntry.account_id.in_(list(code_by_id.keys())))
     )).all()
 
     agg: dict[str, dict] = {}
-    for d, modal, qty, price, disc in rows:
-        q = Decimal(str(qty or 0))
-        rev = q * Decimal(str(price or 0)) - Decimal(str(disc or 0))
-        hpp = q * Decimal(str(modal or 0))
+    for d, acc_id, deb, cred in rows:
+        code = code_by_id.get(acc_id)
         a = agg.setdefault(_quarter(d), {"omzet": Decimal("0"), "hpp": Decimal("0")})
-        a["omzet"] += rev
-        a["hpp"] += hpp
+        if code == "4-1000":      # Penjualan: normal kredit
+            a["omzet"] += Decimal(str(cred or 0)) - Decimal(str(deb or 0))
+        elif code == "5-1000":    # HPP: normal debit
+            a["hpp"] += Decimal(str(deb or 0)) - Decimal(str(cred or 0))
     items = [{"quarter": k, "omzet": _f(v["omzet"]), "hpp": _f(v["hpp"]),
               "gross_profit": _f(v["omzet"] - v["hpp"])}
              for k, v in sorted(agg.items())]
