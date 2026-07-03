@@ -7,7 +7,7 @@ from .routers import (
     purchases, payments, reports,
     # --- modul distribusi ASF ---
     warehouses, courier, orders, reports_ext, settings as settings_router, account,
-    bulk_import, journals,
+    bulk_import, journals, audit, reconcile,
     # --- modul keuangan lanjutan ---
     investors, expenses,
 )
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Ananta API",
-    version="0.7.0",
+    version="0.8.0",
     description="Sistem manajemen bisnis & akuntansi Ananta.",
     openapi_url="/api/v1/openapi.json",
     docs_url="/docs",
@@ -54,6 +54,8 @@ app.include_router(expenses.loan_router, prefix=API)
 app.include_router(account.router, prefix=API)
 app.include_router(bulk_import.router, prefix=API)
 app.include_router(journals.router, prefix=API)
+app.include_router(audit.router, prefix=API)
+app.include_router(reconcile.router, prefix=API)
 
 
 @app.get("/health", tags=["meta"])

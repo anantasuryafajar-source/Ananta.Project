@@ -1,3 +1,4 @@
+from ..services.audit_service import write_audit
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,6 +60,7 @@ async def void_bill_endpoint(
     try:
         bill = await void_bill(db, company_id=user.company_id,
                                user_id=user.id, bill_id=bill_id)
+        await write_audit(db, company_id=user.company_id, user_id=user.id, action="void_bill", entity="bill", entity_id=bill_id)
         await db.commit()
     except (VoidError, JournalNotBalanced) as e:
         await db.rollback()
@@ -79,6 +81,7 @@ async def hard_delete_bill_endpoint(
     try:
         number = await hard_delete_bill(db, company_id=user.company_id,
                                         bill_id=bill_id)
+        await write_audit(db, company_id=user.company_id, user_id=user.id, action="hard_delete_bill", entity="bill", entity_id=bill_id)
         await db.commit()
     except VoidError as e:
         await db.rollback()

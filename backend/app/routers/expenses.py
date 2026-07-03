@@ -1,3 +1,4 @@
+from ..services.audit_service import write_audit
 from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
@@ -160,6 +161,7 @@ async def void_expense_endpoint(
     try:
         exp = await void_expense(db, company_id=user.company_id,
                                  user_id=user.id, expense_id=expense_id)
+        await write_audit(db, company_id=user.company_id, user_id=user.id, action="void_expense", entity="expense", entity_id=expense_id)
         await db.commit()
     except (VoidError, JournalNotBalanced) as e:
         await db.rollback()
@@ -180,6 +182,7 @@ async def hard_delete_expense_endpoint(
     try:
         number = await hard_delete_expense(db, company_id=user.company_id,
                                            expense_id=expense_id)
+        await write_audit(db, company_id=user.company_id, user_id=user.id, action="hard_delete_expense", entity="expense", entity_id=expense_id)
         await db.commit()
     except VoidError as e:
         await db.rollback()

@@ -22,7 +22,7 @@ type Ledger = {
   closing_balance: string;
 };
 
-const TABS = ["Jurnal", "Buku Besar", "Bagan Akun"] as const;
+const TABS = ["Jurnal", "Buku Besar", "Bagan Akun", "Jejak Audit"] as const;
 type Tab = (typeof TABS)[number];
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
@@ -64,6 +64,13 @@ export default function AkuntansiPage() {
 
   // ---- Buku Besar ----
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [audit, setAudit] = useState<{ id: string; at: string | null; user: string; action_label: string; entity: string; entity_id: string | null; detail: string | null }[] | null>(null);
+
+  useEffect(() => {
+    if (tab === "Jejak Audit" && audit === null) {
+      api<typeof audit>("/audit?limit=150").then(setAudit).catch(() => setAudit([]));
+    }
+  }, [tab, audit]);
   const [accId, setAccId] = useState("");
   const [start, setStart] = useState(yearStart());
   const [end, setEnd] = useState(today());
@@ -229,7 +236,34 @@ export default function AkuntansiPage() {
         )}
       </div>
 
-      {/* Modal detail jurnal */}
+        {tab === "Jejak Audit" && (
+          <Card className="overflow-hidden p-0">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-line text-left text-caption text-ink-muted">
+                <th className="px-4 py-3 font-medium">Waktu</th>
+                <th className="px-4 py-3 font-medium">Pengguna</th>
+                <th className="px-4 py-3 font-medium">Aksi</th>
+                <th className="px-4 py-3 font-medium">Objek</th>
+                <th className="px-4 py-3 font-medium">Detail</th>
+              </tr></thead>
+              <tbody>
+                {(audit ?? []).map((a) => (
+                  <tr key={a.id} className="border-b border-line last:border-0">
+                    <td className="px-4 py-2.5 text-ink-muted">{a.at ? new Date(a.at).toLocaleString("id-ID") : "—"}</td>
+                    <td className="px-4 py-2.5 text-ink">{a.user}</td>
+                    <td className="px-4 py-2.5"><span className="rounded bg-surface-sunken px-2 py-0.5 text-caption text-ink">{a.action_label}</span></td>
+                    <td className="px-4 py-2.5 text-ink-muted">{a.entity}{a.entity_id ? ` · ${a.entity_id.slice(0, 8)}…` : ""}</td>
+                    <td className="max-w-72 truncate px-4 py-2.5 text-ink-muted">{a.detail ?? "—"}</td>
+                  </tr>
+                ))}
+                {audit?.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-subtle">Belum ada jejak audit. Aksi seperti void, hapus, dan tutup buku akan tercatat di sini.</td></tr>}
+                {audit === null && <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-subtle">Memuat…</td></tr>}
+              </tbody>
+            </table>
+          </Card>
+        )}
+
+            {/* Modal detail jurnal */}
       <Modal open={!!detail} onClose={() => setDetail(null)} title={detail ? `Jurnal ${detail.number}` : ""} width="max-w-2xl">
         {detail && (
           <div className="space-y-3">

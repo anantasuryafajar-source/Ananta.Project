@@ -1,3 +1,4 @@
+from ..services.audit_service import write_audit
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import get_db
@@ -109,6 +110,7 @@ async def void_received(
         number = await void_payment_received(
             db, company_id=user.company_id, user_id=user.id,
             payment_id=payment_id)
+        await write_audit(db, company_id=user.company_id, user_id=user.id, action="void_payment", entity="payment", entity_id=payment_id)
         await db.commit()
     except PaymentVoidError as e:
         await db.rollback()
@@ -129,6 +131,7 @@ async def void_made(
         number = await void_payment_made(
             db, company_id=user.company_id, user_id=user.id,
             payment_id=payment_id)
+        await write_audit(db, company_id=user.company_id, user_id=user.id, action="void_payment", entity="payment", entity_id=payment_id)
         await db.commit()
     except PaymentVoidError as e:
         await db.rollback()

@@ -11,6 +11,7 @@ from .invoice import Invoice, InvoiceLine, PaymentReceived
 from .purchase import Bill, BillLine, PaymentMade
 from .sequence import DocumentSequence
 from .audit import AuditLog
+from .recon import BankReconMark
 # --- Modul distribusi ASF ---
 from .courier import CourierExpense
 from .orders import PurchaseOrder, POLine, SalesOrder, SOLine
@@ -23,7 +24,7 @@ __all__ = [
     "Account", "Contact", "ProductCategory", "Product", "StockLevel",
     "StockMovement", "Journal", "JournalEntry", "Invoice", "InvoiceLine",
     "PaymentReceived", "Bill", "BillLine", "PaymentMade",
-    "DocumentSequence", "AuditLog",
+    "DocumentSequence", "AuditLog", "BankReconMark",
     "CourierExpense",
     "PurchaseOrder", "POLine", "SalesOrder", "SOLine",
     "Investor", "InvestorPayout",

@@ -1,3 +1,4 @@
+from ..services.audit_service import write_audit
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, func
@@ -214,5 +215,9 @@ async def set_period_lock(
         select(Company).where(Company.id == user.company_id)
     )).scalar_one()
     c.period_lock_date = body.lock_date
+    await write_audit(db, company_id=user.company_id, user_id=user.id,
+                      action=("period_lock" if body.lock_date else "period_unlock"),
+                      entity="company", entity_id=user.company_id,
+                      detail=(f"kunci s.d. {body.lock_date}" if body.lock_date else "buka kunci"))
     await db.commit()
     return {"ok": True, "lock_date": str(c.period_lock_date) if c.period_lock_date else None}

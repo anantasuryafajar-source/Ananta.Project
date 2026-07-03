@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Wallet,
   BookOpen, Users, FileBarChart, Settings, Warehouse, Bike,
-  ClipboardList, ClipboardCheck, PiggyBank, Receipt,
+  ClipboardList, ClipboardCheck, PiggyBank, Receipt, Landmark,
 } from "lucide-react";
 
 export const NAV = [
@@ -17,6 +17,7 @@ export const NAV = [
   { href: "/biaya", label: "Biaya Operasional", icon: Receipt },
   { href: "/investor", label: "Investor", icon: PiggyBank },
   { href: "/akuntansi", label: "Akuntansi", icon: BookOpen },
+  { href: "/rekonsiliasi", label: "Rekonsiliasi Bank", icon: Landmark },
   { href: "/kontak", label: "Kontak", icon: Users },
   { href: "/laporan", label: "Laporan", icon: FileBarChart },
   { href: "/pengaturan", label: "Pengaturan", icon: Settings },
