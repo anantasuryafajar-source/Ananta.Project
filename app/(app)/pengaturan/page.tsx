@@ -1,12 +1,11 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Building2, Warehouse as WhIcon, Users, Pencil, KeyRound, Lock } from "lucide-react";
+import { Plus, Building2, Warehouse as WhIcon, Users, Pencil, KeyRound, Lock, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
 import { Modal } from "@/components/ui/modal";
 import { Field, Textarea } from "@/components/ui/form";
 
@@ -58,11 +57,35 @@ export default function PengaturanPage() {
   }
   useEffect(muat, []);
 
+  const [whEditId, setWhEditId] = useState<string | null>(null);
+
+  function bukaEditWh(w: Warehouse) {
+    setFormError(null);
+    setWhEditId(w.id);
+    setWhForm({ code: w.code, name: w.name });
+    setOpenWh(true);
+  }
+
+  async function hapusWh(w: Warehouse) {
+    if (!confirm(`Hapus gudang "${w.name}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+    try {
+      await api(`/warehouses/${w.id}`, { method: "DELETE" });
+      muat();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gagal menghapus gudang.");
+    }
+  }
+
   async function simpanWh(e: FormEvent) {
     e.preventDefault(); setFormError(null);
+    if (!whForm.code.trim() || !whForm.name.trim()) return setFormError("Kode & nama wajib diisi.");
     try {
-      await api("/warehouses", { method: "POST", body: JSON.stringify({ ...whForm, is_default: false }) });
-      setOpenWh(false); setWhForm({ code: "", name: "" }); muat();
+      if (whEditId) {
+        await api(`/warehouses/${whEditId}`, { method: "PATCH", body: JSON.stringify({ ...whForm, is_default: false }) });
+      } else {
+        await api("/warehouses", { method: "POST", body: JSON.stringify({ ...whForm, is_default: false }) });
+      }
+      setOpenWh(false); setWhEditId(null); setWhForm({ code: "", name: "" }); muat();
     } catch (err) { setFormError(err instanceof Error ? err.message : "Gagal."); }
   }
 
@@ -179,19 +202,27 @@ export default function PengaturanPage() {
               <WhIcon size={18} className="text-primary" />
               <p className="text-sm font-medium text-ink">Gudang</p>
             </div>
-            <Button variant="secondary" onClick={() => { setFormError(null); setOpenWh(true); }}><Plus size={15} /> Tambah</Button>
+            <Button variant="secondary" onClick={() => { setFormError(null); setWhEditId(null); setWhForm({ code: "", name: "" }); setOpenWh(true); }}><Plus size={15} /> Tambah</Button>
           </div>
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-caption uppercase text-ink-subtle"><th className="py-1">Kode</th><th>Nama</th><th className="text-right">Default</th></tr></thead>
+            <thead><tr className="text-left text-caption uppercase text-ink-subtle"><th className="py-1">Kode</th><th>Nama</th><th className="text-right">Default</th><th className="text-right">Aksi</th></tr></thead>
             <tbody>
               {whs.map((w) => (
                 <tr key={w.id} className="border-t border-line">
                   <td className="py-1 text-ink-muted">{w.code}</td>
                   <td className="text-ink">{w.name}</td>
                   <td className="text-right">{w.is_default ? <span className="text-success">✓</span> : ""}</td>
+                  <td className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => bukaEditWh(w)} className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink" title="Edit"><Pencil size={14} /></button>
+                      {!w.is_default && (
+                        <button onClick={() => hapusWh(w)} className="rounded p-1 text-ink-subtle hover:bg-danger/10 hover:text-danger" title="Hapus"><Trash2 size={14} /></button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
-              {whs.length === 0 && <tr><td colSpan={3} className="py-3 text-center text-ink-subtle">Belum ada gudang.</td></tr>}
+              {whs.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-ink-subtle">Belum ada gudang.</td></tr>}
             </tbody>
           </table>
         </Card>
@@ -280,7 +311,7 @@ export default function PengaturanPage() {
       </Modal>
 
       {/* Modal tambah gudang */}
-      <Modal open={openWh} onClose={() => setOpenWh(false)} title="Tambah Gudang">
+      <Modal open={openWh} onClose={() => setOpenWh(false)} title={whEditId ? "Edit Gudang" : "Tambah Gudang"}>
         <form onSubmit={simpanWh} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Kode"><Input value={whForm.code} onChange={(e) => setWhForm((f) => ({ ...f, code: e.target.value }))} required placeholder="GD-02" /></Field>
@@ -302,7 +333,7 @@ export default function PengaturanPage() {
             <Field label="Email"><Input type="email" value={uf.email} onChange={(e) => setUf((f) => ({ ...f, email: e.target.value }))} required /></Field>
           </div>
           <Field label="Password" hint="Minimal 8 karakter">
-            <PasswordInput value={uf.password} onChange={(e) => setUf((f) => ({ ...f, password: e.target.value }))} required />
+            <Input type="password" value={uf.password} onChange={(e) => setUf((f) => ({ ...f, password: e.target.value }))} required />
           </Field>
           <Field label="Peran">
             <div className="flex flex-wrap gap-3 pt-1">
@@ -355,10 +386,10 @@ export default function PengaturanPage() {
           <p className="text-sm text-ink-muted">Kata sandi baru untuk <b className="text-ink">{resetUser?.email}</b>. Sampaikan ke pengguna secara langsung.</p>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Kata sandi baru" hint="Minimal 8 karakter">
-              <PasswordInput value={rp.new_password} onChange={(e) => setRp((f) => ({ ...f, new_password: e.target.value }))} required autoFocus />
+              <Input type="password" value={rp.new_password} onChange={(e) => setRp((f) => ({ ...f, new_password: e.target.value }))} required autoFocus />
             </Field>
             <Field label="Ulangi kata sandi">
-              <PasswordInput value={rp.confirm} onChange={(e) => setRp((f) => ({ ...f, confirm: e.target.value }))} required />
+              <Input type="password" value={rp.confirm} onChange={(e) => setRp((f) => ({ ...f, confirm: e.target.value }))} required />
             </Field>
           </div>
           {formError && <p className="text-sm text-danger">{formError}</p>}

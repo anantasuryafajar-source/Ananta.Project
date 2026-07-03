@@ -55,6 +55,62 @@ async def warehouse_stock(
     ]
 
 
+@router.patch("/{warehouse_id}", response_model=WarehouseOut)
+async def update_warehouse(
+    warehouse_id: str,
+    body: WarehouseIn,
+    user: User = Depends(require_roles("finance", "warehouse")),
+    db: AsyncSession = Depends(get_db),
+):
+    wh = (await db.execute(
+        select(Warehouse).where(
+            Warehouse.id == warehouse_id,
+            Warehouse.company_id == user.company_id,
+        )
+    )).scalar_one_or_none()
+    if wh is None:
+        raise HTTPException(status_code=404, detail="Gudang tidak ditemukan.")
+    data = body.model_dump()
+    for k, v in data.items():
+        setattr(wh, k, v)
+    await db.commit()
+    await db.refresh(wh)
+    return wh
+
+
+@router.delete("/{warehouse_id}", status_code=204)
+async def delete_warehouse(
+    warehouse_id: str,
+    user: User = Depends(require_roles("finance", "warehouse")),
+    db: AsyncSession = Depends(get_db),
+):
+    wh = (await db.execute(
+        select(Warehouse).where(
+            Warehouse.id == warehouse_id,
+            Warehouse.company_id == user.company_id,
+        )
+    )).scalar_one_or_none()
+    if wh is None:
+        raise HTTPException(status_code=404, detail="Gudang tidak ditemukan.")
+    if wh.is_default:
+        raise HTTPException(status_code=422,
+                            detail="Gudang default tidak bisa dihapus.")
+    # Guard: tolak bila masih ada stok (quantity != 0) di gudang ini
+    levels = (await db.execute(
+        select(StockLevel).where(StockLevel.warehouse_id == warehouse_id)
+    )).scalars().all()
+    total_qty = sum(abs(float(l.quantity or 0)) for l in levels)
+    if total_qty > 0:
+        raise HTTPException(status_code=422,
+            detail="Gudang masih memiliki stok. Kosongkan/pindahkan stok dulu sebelum menghapus.")
+    # hapus baris stok nol yang mungkin tersisa, lalu hapus gudang
+    for l in levels:
+        await db.delete(l)
+    await db.delete(wh)
+    await db.commit()
+    return None
+
+
 # --- Transfer antar-gudang ---
 transfer_router = APIRouter(prefix="/transfers", tags=["transfers"])
 
