@@ -9,9 +9,11 @@ export function Sidebar() {
   return (
     <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-line bg-surface">
       <div className="px-5 py-5">
-        <p className="font-display text-xl font-bold tracking-tight text-ink">
-          Ananta
-        </p>
+        <div className="flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-mark.svg" alt="" className="h-6 w-auto" />
+          <span className="font-display text-xl font-bold tracking-tight text-ink">Ananta</span>
+        </div>
         <ContinuityRibbon className="mt-1 opacity-80" />
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3">

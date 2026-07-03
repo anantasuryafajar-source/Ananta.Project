@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100" width="300" height="100" role="img" aria-label="Ananta">
+  <g transform="translate(8,18) scale(0.62)">
+    <path d="M14,32 C14,10 38,10 50,32 C62,54 86,54 86,32 C86,10 62,10 50,32 C38,54 14,54 14,32 Z"
+          fill="none" stroke="#2F6F5E" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="50" cy="32" r="5.5" fill="#E2A33C"/>
+  </g>
+  <text x="98" y="66" font-family="'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif" font-weight="700" font-size="46" fill="#2F6F5E" letter-spacing="-0.5">Ananta</text>
+</svg>

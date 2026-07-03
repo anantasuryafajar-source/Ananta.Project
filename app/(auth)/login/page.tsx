@@ -30,7 +30,8 @@ export default function LoginPage() {
   return (
     <main className="grid min-h-screen place-items-center bg-canvas px-4">
       <div className="w-full max-w-sm rounded-[var(--radius-card)] border border-line bg-surface p-7">
-        <p className="font-display text-2xl font-bold tracking-tight text-ink">Ananta</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-full.svg" alt="Ananta" className="h-11 w-auto" />
         <ContinuityRibbon className="mb-5 mt-1" />
         <p className="mb-5 text-sm text-ink-muted">Masuk untuk melanjutkan.</p>
 
