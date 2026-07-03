@@ -184,3 +184,35 @@ async def reset_password(
     target.password_hash = hash_password(body.new_password)
     await db.commit()
     return {"ok": True}
+
+
+# ============================= TUTUP BUKU (period lock) =============================
+from datetime import date as _date
+
+
+class PeriodLockIn(BaseModel):
+    lock_date: _date | None = None   # None = buka semua kunci
+
+
+@router.get("/period-lock")
+async def get_period_lock(
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+):
+    c = (await db.execute(
+        select(Company).where(Company.id == user.company_id)
+    )).scalar_one()
+    return {"lock_date": str(c.period_lock_date) if c.period_lock_date else None}
+
+
+@router.patch("/period-lock")
+async def set_period_lock(
+    body: PeriodLockIn,
+    user: User = Depends(require_roles()),  # owner
+    db: AsyncSession = Depends(get_db),
+):
+    c = (await db.execute(
+        select(Company).where(Company.id == user.company_id)
+    )).scalar_one()
+    c.period_lock_date = body.lock_date
+    await db.commit()
+    return {"ok": True, "lock_date": str(c.period_lock_date) if c.period_lock_date else None}

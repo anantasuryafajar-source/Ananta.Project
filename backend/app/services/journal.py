@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..models import Journal, JournalEntry
 
@@ -61,6 +62,16 @@ async def post_journal(
             raise JournalNotBalanced("Nilai debit/kredit tidak boleh negatif.")
         if d > 0 and c > 0:
             raise JournalNotBalanced("Satu baris tidak boleh debit DAN kredit sekaligus.")
+
+    # --- Tutup buku: tolak posting pada periode yang sudah dikunci ---
+    from ..models import Company
+    lock = (await db.execute(
+        select(Company.period_lock_date).where(Company.id == company_id)
+    )).scalar_one_or_none()
+    if lock is not None and on_date <= lock:
+        raise JournalNotBalanced(
+            f"Periode sampai {lock} sudah ditutup — tidak bisa memposting "
+            f"transaksi bertanggal {on_date}. Minta owner membuka periode dulu.")
 
     journal = Journal(
         company_id=company_id, number=number, date=on_date, memo=memo,

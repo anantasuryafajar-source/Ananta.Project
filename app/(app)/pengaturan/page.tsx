@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Building2, Warehouse as WhIcon, Users, Pencil, KeyRound } from "lucide-react";
+import { Plus, Building2, Warehouse as WhIcon, Users, Pencil, KeyRound, Lock } from "lucide-react";
 import { api } from "@/lib/api";
 import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
@@ -20,6 +20,10 @@ export default function PengaturanPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [roles, setRoles] = useState<RoleOpt[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [lockDate, setLockDate] = useState<string | null>(null);
+  const [lockInput, setLockInput] = useState("");
+  const [lockSaving, setLockSaving] = useState(false);
+  const [lockMsg, setLockMsg] = useState<string | null>(null);
 
   const [openWh, setOpenWh] = useState(false);
   const [whForm, setWhForm] = useState({ code: "", name: "" });
@@ -47,6 +51,9 @@ export default function PengaturanPage() {
     api<Warehouse[]>("/warehouses").then(setWhs).catch(() => {});
     api<UserRow[]>("/settings/users").then(setUsers).catch(() => {});
     api<RoleOpt[]>("/settings/roles").then(setRoles).catch(() => {});
+    api<{ lock_date: string | null }>("/settings/period-lock")
+      .then((d) => { setLockDate(d.lock_date); setLockInput(d.lock_date ?? ""); })
+      .catch(() => {});
   }
   useEffect(muat, []);
 
@@ -118,6 +125,20 @@ export default function PengaturanPage() {
       setResetUser(null);
     } catch (err) { setFormError(err instanceof Error ? err.message : "Gagal reset kata sandi."); }
     finally { setSaving(false); }
+  }
+
+  async function simpanLock(clear: boolean) {
+    setLockMsg(null); setLockSaving(true);
+    try {
+      const body = { lock_date: clear ? null : (lockInput || null) };
+      const res = await api<{ lock_date: string | null }>("/settings/period-lock", {
+        method: "PATCH", body: JSON.stringify(body),
+      });
+      setLockDate(res.lock_date);
+      setLockInput(res.lock_date ?? "");
+      setLockMsg(res.lock_date ? `Buku dikunci s.d. ${res.lock_date}.` : "Kunci periode dibuka.");
+    } catch (e) { setLockMsg(e instanceof Error ? e.message : "Gagal menyimpan."); }
+    finally { setLockSaving(false); }
   }
 
   function toggleRole(list: string[], name: string): string[] {
@@ -211,6 +232,36 @@ export default function PengaturanPage() {
           </table>
           <p className="mt-3 text-caption text-ink-subtle">Menambah/mengubah user hanya bisa dilakukan oleh pemilik (owner).</p>
         </Card>
+      </div>
+
+      <div className="px-6 pb-6">
+      <Card>
+        <div className="mb-3 flex items-center gap-2">
+          <Lock size={18} className="text-primary" />
+          <p className="text-sm font-medium text-ink">Tutup Buku (Kunci Periode)</p>
+        </div>
+        <p className="mb-3 text-sm text-ink-muted">
+          Transaksi bertanggal sampai dengan tanggal kunci tidak bisa ditambah, diubah, di-void,
+          atau dihapus. Gunakan setelah tutup bulan agar angka periode lama tidak berubah.
+        </p>
+        <p className="mb-3 text-sm">Status: {lockDate
+          ? <b className="text-ink">terkunci s.d. {lockDate}</b>
+          : <span className="text-ink-muted">belum ada penguncian</span>}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="date" value={lockInput} onChange={(e) => setLockInput(e.target.value)}
+            className="rounded-[var(--radius-input)] border border-line bg-surface px-2 py-1.5 text-sm text-ink" />
+          <Button onClick={() => simpanLock(false)} disabled={lockSaving || !lockInput}>
+            {lockSaving ? "Menyimpan…" : "Kunci s.d. tanggal ini"}
+          </Button>
+          {lockDate && (
+            <Button variant="secondary" onClick={() => simpanLock(true)} disabled={lockSaving}>
+              Buka kunci
+            </Button>
+          )}
+        </div>
+        {lockMsg && <p className="mt-2 text-sm text-ink-muted">{lockMsg}</p>}
+        <p className="mt-2 text-caption text-ink-subtle">Hanya owner. Membuka kunci memungkinkan koreksi, lalu kunci lagi.</p>
+      </Card>
       </div>
 
       {/* Modal edit perusahaan */}

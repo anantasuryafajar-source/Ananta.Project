@@ -1,4 +1,5 @@
-from sqlalchemy import String, ForeignKey, Boolean
+from datetime import date
+from sqlalchemy import String, ForeignKey, Boolean, Date
 from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base, PKMixin, TimestampMixin
 
@@ -12,6 +13,8 @@ class Company(Base, PKMixin, TimestampMixin):
     # Metode HPP per perusahaan: 'fifo' atau 'average'
     costing_method: Mapped[str] = mapped_column(String(10), default="average")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Tutup buku: transaksi bertanggal <= ini ditolak (None = belum ditutup)
+    period_lock_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
 
 class Warehouse(Base, PKMixin, TimestampMixin):

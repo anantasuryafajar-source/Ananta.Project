@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Trash2, Ban } from "lucide-react";
+import { Plus, Trash2, Ban, Wallet } from "lucide-react";
 import { api } from "@/lib/api";
 import { rupiah, tanggal } from "@/lib/format";
 import { Topbar } from "@/components/ananta/topbar";
@@ -44,6 +44,22 @@ function lineTotal(l: Line): number {
 export default function PembelianPage() {
   const [items, setItems] = useState<Bill[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [payFor, setPayFor] = useState<Bill | null>(null);
+  const [pays, setPays] = useState<{ id: string; number: string; date: string; amount: string }[]>([]);
+
+  async function bukaPembayaran(b: Bill) {
+    setPayFor(b);
+    try { setPays(await api(`/payments/made?bill_id=${b.id}`)); }
+    catch { setPays([]); }
+  }
+  async function voidPembayaran(pid: string) {
+    if (!window.confirm("Batalkan pembayaran ini? Jurnal balik dibuat & sisa utang dikembalikan. Hanya owner.")) return;
+    try {
+      await api(`/payments/made/${pid}/void`, { method: "POST" });
+      if (payFor) { await bukaPembayaran(payFor); }
+      muat();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal membatalkan pembayaran."); }
+  }
   const [open, setOpen] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -166,6 +182,12 @@ export default function PembelianPage() {
                     <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{rupiah(b.paid_total)}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
+                        {Number(b.paid_total) > 0 && b.status !== "void" && (
+                          <button onClick={() => bukaPembayaran(b)} title="Kelola pembayaran"
+                            className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink">
+                            <Wallet size={15} />
+                          </button>
+                        )}
                         {b.status !== "void" && Number(b.paid_total) === 0 && (
                           <button onClick={() => batalkan(b)} title="Batalkan (void) — hanya owner"
                             className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
@@ -269,6 +291,29 @@ export default function PembelianPage() {
           </div>
         </form>
       </Modal>
+      {payFor && (
+        <Modal open={!!payFor} onClose={() => setPayFor(null)} title={`Pembayaran — ${payFor.number}`}>
+          <div className="space-y-3">
+            {pays.length === 0 && <p className="text-sm text-ink-subtle">Belum ada pembayaran tercatat.</p>}
+            {pays.map((p) => (
+              <div key={p.id} className="flex items-center justify-between rounded-[var(--radius-input)] border border-line px-3 py-2 text-sm">
+                <div>
+                  <p className="text-ink">{p.number}</p>
+                  <p className="text-caption text-ink-subtle">{tanggal(p.date)}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="tabular-nums text-ink">{rupiah(p.amount)}</span>
+                  <button onClick={() => voidPembayaran(p.id)} title="Batalkan pembayaran ini"
+                    className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                    <Ban size={15} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            <p className="text-caption text-ink-subtle">Membatalkan pembayaran mengembalikan sisa utang. Setelah itu tagihan bisa di-void.</p>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

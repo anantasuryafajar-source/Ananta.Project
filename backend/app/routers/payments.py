@@ -58,3 +58,82 @@ async def pay(
         raise
     await db.refresh(pay)
     return pay
+
+
+# ============================= LIST & VOID PEMBAYARAN =============================
+from sqlalchemy import select
+from ..models import PaymentReceived, PaymentMade
+from ..deps import current_user
+from ..services.payment_void_service import (
+    void_payment_received, void_payment_made, PaymentVoidError,
+)
+
+
+@router.get("/received")
+async def list_received(
+    invoice_id: str,
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db),
+):
+    rows = (await db.execute(
+        select(PaymentReceived)
+        .where(PaymentReceived.company_id == user.company_id,
+               PaymentReceived.invoice_id == invoice_id)
+        .order_by(PaymentReceived.date.desc())
+    )).scalars().all()
+    return [{"id": p.id, "number": p.number, "date": str(p.date),
+             "amount": str(p.amount)} for p in rows]
+
+
+@router.get("/made")
+async def list_made(
+    bill_id: str,
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db),
+):
+    rows = (await db.execute(
+        select(PaymentMade)
+        .where(PaymentMade.company_id == user.company_id,
+               PaymentMade.bill_id == bill_id)
+        .order_by(PaymentMade.date.desc())
+    )).scalars().all()
+    return [{"id": p.id, "number": p.number, "date": str(p.date),
+             "amount": str(p.amount)} for p in rows]
+
+
+@router.post("/received/{payment_id}/void")
+async def void_received(
+    payment_id: str,
+    user: User = Depends(require_roles()),  # owner
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        number = await void_payment_received(
+            db, company_id=user.company_id, user_id=user.id,
+            payment_id=payment_id)
+        await db.commit()
+    except PaymentVoidError as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        await db.rollback()
+        raise
+    return {"ok": True, "voided": number}
+
+
+@router.post("/made/{payment_id}/void")
+async def void_made(
+    payment_id: str,
+    user: User = Depends(require_roles()),  # owner
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        number = await void_payment_made(
+            db, company_id=user.company_id, user_id=user.id,
+            payment_id=payment_id)
+        await db.commit()
+    except PaymentVoidError as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        await db.rollback()
+        raise
+    return {"ok": True, "voided": number}
