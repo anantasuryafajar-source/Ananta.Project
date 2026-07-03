@@ -1,4 +1,5 @@
 "use client";
+import { rupiah } from "@/lib/format";
 import { useEffect, useState, type FormEvent } from "react";
 import { Plus, ArrowRightLeft, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -123,7 +124,7 @@ export default function GudangPage() {
                     <td className="px-4 py-3 text-ink-muted">{s.sku}</td>
                     <td className="px-4 py-3 text-ink">{s.name}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{Number(s.quantity)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{Number(s.avg_cost).toLocaleString("id-ID")}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{rupiah(s.avg_cost)}</td>
                   </tr>
                 ))}
               </tbody>
