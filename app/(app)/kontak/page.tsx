@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState, useRef, type FormEvent } from "react";
-import { Plus, Upload, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useState, useRef, useMemo, type FormEvent } from "react";
+import { Plus, Upload, Pencil, Trash2, Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { readSheet } from "@/lib/excel";
 import { rupiah } from "@/lib/format";
@@ -24,6 +24,8 @@ const KOSONG = {
 export default function KontakPage() {
   const [items, setItems] = useState<Contact[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [tipe, setTipe] = useState<"all"|"customer"|"supplier">("all");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...KOSONG });
   const [editId, setEditId] = useState<string | null>(null);
@@ -115,6 +117,16 @@ export default function KontakPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
   }
 
+  const filtered = useMemo(() => {
+    if (!items) return null;
+    const t = q.trim().toLowerCase();
+    return items.filter((c) => {
+      const okQ = !t || c.name.toLowerCase().includes(t) || (c.phone ?? "").toLowerCase().includes(t);
+      const okT = tipe === "all" || c.type === tipe || (tipe === "supplier" && c.type === "both") || (tipe === "customer" && c.type === "both");
+      return okQ && okT;
+    });
+  }, [items, q, tipe]);
+
   return (
     <>
       <Topbar title="Kontak" />
@@ -139,6 +151,27 @@ export default function KontakPage() {
           </Card>
         )}
         {items && items.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-[var(--radius-input)] border border-line bg-surface px-3 py-1.5">
+              <Search size={15} className="text-ink-subtle" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari nama atau telepon…"
+                className="w-60 bg-transparent text-sm text-ink outline-none placeholder:text-ink-subtle" />
+            </div>
+            <div className="flex items-center gap-1">
+              {(["all","customer","supplier"] as const).map((t) => (
+                <button key={t} onClick={() => setTipe(t)}
+                  className={`rounded-[var(--radius-input)] px-3 py-1.5 text-sm capitalize transition-colors ${tipe===t?"bg-primary text-white":"bg-surface-sunken text-ink-muted hover:text-ink"}`}>
+                  {t==="all"?"Semua":t==="customer"?"Pelanggan":"Pemasok"}
+                </button>
+              ))}
+            </div>
+            <span className="text-caption text-ink-subtle">{filtered?.length ?? 0} dari {items.length} kontak</span>
+          </div>
+        )}
+        {filtered && filtered.length === 0 && items && items.length > 0 && (
+          <Card className="text-center"><p className="text-sm text-ink-muted">Tidak ada kontak yang cocok dengan pencarian.</p></Card>
+        )}
+        {filtered && filtered.length > 0 && (
           <Card className="p-0 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -151,7 +184,7 @@ export default function KontakPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((c) => (
+                {filtered.map((c) => (
                   <tr key={c.id} className="border-b border-line last:border-0 hover:bg-surface-sunken">
                     <td className="px-4 py-3 text-ink">{c.name}</td>
                     <td className="px-4 py-3 text-ink-muted capitalize">{c.type}</td>

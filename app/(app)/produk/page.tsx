@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState, useRef, type FormEvent } from "react";
-import { Plus, Upload, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useState, useRef, useMemo, type FormEvent } from "react";
+import { Plus, Upload, Pencil, Trash2, Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { readSheet } from "@/lib/excel";
 import { rupiah } from "@/lib/format";
@@ -27,6 +27,7 @@ export default function ProdukPage() {
   const [items, setItems] = useState<Product[] | null>(null);
   const [stock, setStock] = useState<Record<string, StockItem>>({});
   const [error, setError] = useState<string | null>(null);
+  const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...KOSONG });
   const [editId, setEditId] = useState<string | null>(null);
@@ -74,8 +75,17 @@ export default function ProdukPage() {
 
   async function simpan(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setFormError(null);
+    // --- validasi ramah ---
+    if (!form.name.trim()) return setFormError("Nama produk wajib diisi.");
+    if (!form.sku.trim()) return setFormError("SKU wajib diisi.");
+    const modal = Number(form.purchase_price || 0);
+    const jual = Number(form.sale_price || 0);
+    const minst = Number(form.min_stock || 0);
+    if (modal < 0 || jual < 0 || minst < 0) return setFormError("Harga & stok minimum tidak boleh negatif.");
+    if (jual > 0 && modal > 0 && jual < modal)
+      return setFormError("Harga jual di bawah harga modal — periksa kembali (rugi per unit).");
+    setSaving(true);
     try {
       await api(editId ? `/products/${editId}` : "/products", {
         method: editId ? "PATCH" : "POST",
@@ -118,6 +128,14 @@ export default function ProdukPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
   }
 
+  const filtered = useMemo(() => {
+    if (!items) return null;
+    const t = q.trim().toLowerCase();
+    if (!t) return items;
+    return items.filter((p) =>
+      p.name.toLowerCase().includes(t) || (p.sku ?? "").toLowerCase().includes(t));
+  }, [items, q]);
+
   return (
     <>
       <Topbar title="Produk & Stok" />
@@ -135,7 +153,17 @@ export default function ProdukPage() {
         {importMsg && <Card className="mb-4"><p className="text-sm text-ink-muted">{importMsg}</p></Card>}
 
         {error && <Card><p className="text-sm text-danger">{error}</p></Card>}
-        {items && (
+        {items && items.length > 0 && (
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex items-center gap-2 rounded-[var(--radius-input)] border border-line bg-surface px-3 py-1.5">
+              <Search size={15} className="text-ink-subtle" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari nama atau SKU…"
+                className="w-64 bg-transparent text-sm text-ink outline-none placeholder:text-ink-subtle" />
+            </div>
+            <span className="text-caption text-ink-subtle">{filtered?.length ?? 0} dari {items.length} produk</span>
+          </div>
+        )}
+        {filtered && (
           <Card className="overflow-hidden p-0">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-left text-caption text-ink-muted">
@@ -148,7 +176,7 @@ export default function ProdukPage() {
                 <th className="w-16" />
               </tr></thead>
               <tbody>
-                {items.map((p) => {
+                {filtered.map((p) => {
                   const s = stock[p.sku];
                   return (
                     <tr key={p.id} className="border-b border-line last:border-0 hover:bg-surface-sunken">
