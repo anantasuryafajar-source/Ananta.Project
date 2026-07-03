@@ -17,13 +17,13 @@ dependencies = [
   "pyjwt>=2.10",
   "redis>=5.2",
   "python-multipart>=0.0.20",
+  "httpx>=0.28",
 ]
 
 [dependency-groups]
 dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.25",
-  "httpx>=0.28",
   "aiosqlite>=0.20",
 ]
 
