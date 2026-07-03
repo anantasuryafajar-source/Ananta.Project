@@ -277,8 +277,8 @@ async def sales_kpi(db: AsyncSession, company_id: str, start: date, end: date) -
         a["paid"] += Decimal(str(paid or 0))
     items = [{"sales": k, "invoices": v["count"], "omzet": _f(v["omzet"]),
               "paid": _f(v["paid"]),
-              "collection_pct": round(float(v["paid"] / v["omzet"] * 100), 1)
-              if v["omzet"] > 0 else None}
+              "collection_pct": (round(float(v["paid"] / v["omzet"] * 100), 1)
+                                 if Decimal(str(v["omzet"])) > 0 else None)}
              for k, v in agg.items()]
     items.sort(key=lambda x: Decimal(x["omzet"]), reverse=True)
     return {"items": items}

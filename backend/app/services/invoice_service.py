@@ -126,6 +126,7 @@ async def create_and_post_invoice(
     invoice.journal_id = journal.id
 
     # --- Mutasi & saldo stok ---
+    stock_warnings = []
     for product, qty, unit_cost in stock_ops:
         level = (await db.execute(
             select(StockLevel).where(
@@ -133,6 +134,14 @@ async def create_and_post_invoice(
                 StockLevel.warehouse_id == warehouse_id,
             )
         )).scalar_one_or_none()
+        avail = Decimal(str(level.quantity)) if level else Decimal("0")
+        if qty > avail:
+            stock_warnings.append({
+                "product": product.name,
+                "diminta": str(qty),
+                "tersedia": str(avail),
+                "kurang": str(qty - avail),
+            })
         if level:
             level.quantity = Decimal(str(level.quantity)) - qty
         db.add(StockMovement(
@@ -142,4 +151,5 @@ async def create_and_post_invoice(
         ))
 
     await db.flush()
+    invoice.stock_warnings = stock_warnings  # atribut sementara (tidak disimpan ke DB)
     return invoice

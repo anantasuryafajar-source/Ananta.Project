@@ -97,8 +97,13 @@ async def create_invoice(
     except Exception:
         await db.rollback()
         raise
+    warnings = getattr(invoice, "stock_warnings", [])
     await db.refresh(invoice)
-    return invoice
+    data = {
+        "id": invoice.id, "number": invoice.number,
+        "status": invoice.status, "stock_warnings": warnings,
+    }
+    return data
 
 
 @router.post("/{invoice_id}/void")

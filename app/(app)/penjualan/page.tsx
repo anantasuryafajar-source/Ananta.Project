@@ -45,6 +45,7 @@ function lineTotal(l: Line): number {
 export default function PenjualanPage() {
   const [items, setItems] = useState<Invoice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stockWarn, setStockWarn] = useState<{product:string;kurang:string;tersedia:string}[]>([]);
   const [open, setOpen] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -152,7 +153,7 @@ export default function PenjualanPage() {
     if (valid.length === 0) return setFormError("Tambahkan minimal satu baris.");
     setSaving(true);
     try {
-      await api("/invoices", {
+      const res = await api<{ stock_warnings?: {product:string;kurang:string;tersedia:string}[] }>("/invoices", {
         method: "POST",
         body: JSON.stringify({
           contact_id: contactId,
@@ -169,6 +170,7 @@ export default function PenjualanPage() {
         }),
       });
       setOpen(false);
+      setStockWarn(res?.stock_warnings ?? []);
       muat();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Gagal menyimpan.");
@@ -193,6 +195,17 @@ export default function PenjualanPage() {
           <Button onClick={bukaForm}><Plus size={16} /> Buat Faktur</Button>
         </div>
 
+        {stockWarn.length > 0 && (
+          <div className="mb-4 rounded-[var(--radius-input)] border border-warning/40 bg-warning/10 px-4 py-3">
+            <p className="text-sm font-medium text-warning">Faktur tersimpan — tetapi stok tidak mencukupi:</p>
+            <ul className="mt-1 space-y-0.5 text-sm text-ink-muted">
+              {stockWarn.map((w, i) => (
+                <li key={i}>• <b className="text-ink">{w.product}</b> — tersedia {w.tersedia}, kurang {w.kurang}. (Stok menjadi minus; catat pembelian/stok awal bila perlu.)</li>
+              ))}
+            </ul>
+            <button onClick={() => setStockWarn([])} className="mt-2 text-caption text-ink-subtle underline">Tutup peringatan</button>
+          </div>
+        )}
         {error && <Card><p className="text-sm text-danger">{error}</p></Card>}
         {items?.length === 0 && (
           <Card className="text-center">

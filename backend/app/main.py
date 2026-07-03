@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Ananta API",
-    version="0.8.0",
+    version="0.8.1",
     description="Sistem manajemen bisnis & akuntansi Ananta.",
     openapi_url="/api/v1/openapi.json",
     docs_url="/docs",
