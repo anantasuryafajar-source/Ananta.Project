@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, type FormEvent } from "react";
-import { Plus, Upload } from "lucide-react";
+import { Plus, Upload, Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { readSheet } from "@/lib/excel";
 import { rupiah } from "@/lib/format";
@@ -29,6 +29,7 @@ export default function ProdukPage() {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...KOSONG });
+  const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -76,8 +77,8 @@ export default function ProdukPage() {
     setSaving(true);
     setFormError(null);
     try {
-      await api("/products", {
-        method: "POST",
+      await api(editId ? `/products/${editId}` : "/products", {
+        method: editId ? "PATCH" : "POST",
         body: JSON.stringify({
           sku: form.sku.trim(),
           name: form.name.trim(),
@@ -98,6 +99,25 @@ export default function ProdukPage() {
     }
   }
 
+  function bukaEdit(p: Product) {
+    setFormError(null);
+    setEditId(p.id);
+    setForm({
+      sku: p.sku, name: p.name, kind: "good", unit: p.unit,
+      sale_price: p.sale_price, purchase_price: p.purchase_price,
+      min_stock: (p as any).min_stock ?? "0",
+    });
+    setOpen(true);
+  }
+
+  async function hapus(p: Product) {
+    if (!window.confirm(`Hapus produk "${p.name}"? Hanya bisa bila belum pernah dipakai transaksi. Hanya owner.`)) return;
+    try {
+      await api(`/products/${p.id}`, { method: "DELETE" });
+      muat();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
+  }
+
   return (
     <>
       <Topbar title="Produk & Stok" />
@@ -108,7 +128,7 @@ export default function ProdukPage() {
           <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
             <Upload size={16} /> {importing ? "Mengimpor…" : "Import Excel"}
           </Button>
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={() => { setEditId(null); setForm({ ...KOSONG }); setFormError(null); setOpen(true); }}>
             <Plus size={16} /> Tambah Produk
           </Button>
         </div>
@@ -125,6 +145,7 @@ export default function ProdukPage() {
                 <th className="px-4 py-3 text-right font-medium">Harga Jual</th>
                 <th className="px-4 py-3 text-right font-medium">Stok</th>
                 <th className="px-4 py-3 text-right font-medium">Nilai</th>
+                <th className="w-16" />
               </tr></thead>
               <tbody>
                 {items.map((p) => {
@@ -137,6 +158,18 @@ export default function ProdukPage() {
                       <td className="px-4 py-3 text-right tabular-nums text-ink">{rupiah(p.sale_price)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{s ? Number(s.quantity) : 0}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink">{s ? rupiah(s.value) : rupiah(0)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-1">
+                          <button onClick={() => bukaEdit(p)} title="Edit produk"
+                            className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink">
+                            <Pencil size={15} />
+                          </button>
+                          <button onClick={() => hapus(p)} title="Hapus (hanya bila belum dipakai; owner)"
+                            className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -146,7 +179,7 @@ export default function ProdukPage() {
         )}
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Tambah Produk">
+      <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Edit Produk" : "Tambah Produk"}>
         <form onSubmit={simpan} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="SKU">

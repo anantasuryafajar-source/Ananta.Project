@@ -148,3 +148,43 @@ async def repay(
         raise
     await db.refresh(loan)
     return loan
+
+
+@router.post("/{expense_id}/void")
+async def void_expense_endpoint(
+    expense_id: str,
+    user: User = Depends(require_roles()),  # absolut: hanya owner
+    db: AsyncSession = Depends(get_db),
+):
+    from ..services.void_service import void_expense, VoidError
+    try:
+        exp = await void_expense(db, company_id=user.company_id,
+                                 user_id=user.id, expense_id=expense_id)
+        await db.commit()
+    except (VoidError, JournalNotBalanced) as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        await db.rollback()
+        raise
+    return {"ok": True}
+
+
+@router.delete("/{expense_id}/hard")
+async def hard_delete_expense_endpoint(
+    expense_id: str,
+    user: User = Depends(require_roles()),  # absolut: hanya owner
+    db: AsyncSession = Depends(get_db),
+):
+    from ..services.void_service import hard_delete_expense, VoidError
+    try:
+        number = await hard_delete_expense(db, company_id=user.company_id,
+                                           expense_id=expense_id)
+        await db.commit()
+    except VoidError as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        await db.rollback()
+        raise
+    return {"ok": True, "deleted": number}

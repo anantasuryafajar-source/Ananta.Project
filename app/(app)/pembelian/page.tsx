@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Ban } from "lucide-react";
 import { api } from "@/lib/api";
 import { rupiah, tanggal } from "@/lib/format";
 import { Topbar } from "@/components/ananta/topbar";
@@ -22,6 +22,7 @@ type Line = {
 };
 
 const STATUS: Record<string, string> = {
+  void: "text-ink-subtle line-through",
   posted: "text-primary", paid: "text-success", overdue: "text-danger",
 };
 
@@ -52,6 +53,22 @@ export default function PembelianPage() {
   const [lines, setLines] = useState<Line[]>([baris()]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  async function hapusPermanen(b: Bill) {
+    if (!window.confirm(`HAPUS PERMANEN tagihan ${b.number}?\n\nDokumen, jurnal, pembayaran & stoknya dihapus TOTAL. Khusus data uji. Hanya owner.`)) return;
+    try {
+      await api(`/bills/${b.id}/hard`, { method: "DELETE" });
+      muat();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
+  }
+
+  async function batalkan(b: Bill) {
+    if (!window.confirm(`Batalkan tagihan ${b.number}? Jurnal balik dibuat & stok ditarik kembali. Hanya owner.`)) return;
+    try {
+      await api(`/bills/${b.id}/void`, { method: "POST" });
+      muat();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal membatalkan."); }
+  }
 
   function muat() {
     api<Bill[]>("/bills").then(setItems).catch((e) => setError(e.message));
@@ -137,6 +154,7 @@ export default function PembelianPage() {
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 text-right font-medium">Total</th>
                 <th className="px-4 py-3 text-right font-medium">Terbayar</th>
+                <th className="w-12" />
               </tr></thead>
               <tbody>
                 {items.map((b) => (
@@ -146,6 +164,20 @@ export default function PembelianPage() {
                     <td className={`px-4 py-3 capitalize ${STATUS[b.status] ?? "text-ink-muted"}`}>{b.status}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{rupiah(b.total)}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{rupiah(b.paid_total)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        {b.status !== "void" && Number(b.paid_total) === 0 && (
+                          <button onClick={() => batalkan(b)} title="Batalkan (void) — hanya owner"
+                            className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                            <Ban size={15} />
+                          </button>
+                        )}
+                        <button onClick={() => hapusPermanen(b)} title="Hapus permanen (data uji) — hanya owner"
+                          className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

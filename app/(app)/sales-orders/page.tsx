@@ -86,6 +86,14 @@ export default function SalesOrdersPage() {
     finally { setBusy(null); }
   }
 
+  async function hapusSO(id: string, number: string) {
+    if (!window.confirm(`Hapus SO ${number}? (Hanya bila belum jadi dokumen lanjutan. Owner.)`)) return;
+    try {
+      await api(`/sales-orders/${id}`, { method: "DELETE" });
+      muat();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
+  }
+
   return (
     <>
       <Topbar title="Sales Order" />
@@ -123,6 +131,10 @@ export default function SalesOrdersPage() {
                           <FileCheck size={15} /> {busy === v.id ? "…" : "Terbitkan Faktur"}
                         </Button>
                       ) : <span className="text-caption text-ink-subtle">{v.invoice_id ? "→ Faktur" : "—"}</span>}
+                      <button onClick={() => hapusSO(v.id, v.number)} title="Hapus (owner)"
+                        className="ml-1 rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                        <Trash2 size={15} />
+                      </button>
                     </td>
                   </tr>
                 ))}

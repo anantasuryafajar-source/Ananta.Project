@@ -89,6 +89,14 @@ export default function PurchaseOrdersPage() {
     finally { setBusy(null); }
   }
 
+  async function hapusPO(id: string, number: string) {
+    if (!window.confirm(`Hapus PO ${number}? (Hanya bila belum jadi dokumen lanjutan. Owner.)`)) return;
+    try {
+      await api(`/purchase-orders/${id}`, { method: "DELETE" });
+      muat();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
+  }
+
   return (
     <>
       <Topbar title="Purchase Order" />
@@ -126,6 +134,10 @@ export default function PurchaseOrdersPage() {
                           <PackageCheck size={15} /> {busy === v.id ? "…" : "Terima"}
                         </Button>
                       ) : <span className="text-caption text-ink-subtle">{v.bill_id ? "→ Bill" : "—"}</span>}
+                      <button onClick={() => hapusPO(v.id, v.number)} title="Hapus (owner)"
+                        className="ml-1 rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                        <Trash2 size={15} />
+                      </button>
                     </td>
                   </tr>
                 ))}

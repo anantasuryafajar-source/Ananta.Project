@@ -47,3 +47,43 @@ async def create_bill(
         raise
     await db.refresh(bill)
     return bill
+
+
+@router.post("/{bill_id}/void")
+async def void_bill_endpoint(
+    bill_id: str,
+    user: User = Depends(require_roles()),  # absolut: hanya owner
+    db: AsyncSession = Depends(get_db),
+):
+    from ..services.void_service import void_bill, VoidError
+    try:
+        bill = await void_bill(db, company_id=user.company_id,
+                               user_id=user.id, bill_id=bill_id)
+        await db.commit()
+    except (VoidError, JournalNotBalanced) as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        await db.rollback()
+        raise
+    return {"ok": True, "status": bill.status}
+
+
+@router.delete("/{bill_id}/hard")
+async def hard_delete_bill_endpoint(
+    bill_id: str,
+    user: User = Depends(require_roles()),  # absolut: hanya owner
+    db: AsyncSession = Depends(get_db),
+):
+    from ..services.void_service import hard_delete_bill, VoidError
+    try:
+        number = await hard_delete_bill(db, company_id=user.company_id,
+                                        bill_id=bill_id)
+        await db.commit()
+    except VoidError as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        await db.rollback()
+        raise
+    return {"ok": True, "deleted": number}

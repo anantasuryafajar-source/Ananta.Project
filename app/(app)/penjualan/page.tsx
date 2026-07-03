@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Trash2, Printer, Truck, Search } from "lucide-react";
+import { Plus, Trash2, Printer, Truck, Search, Ban } from "lucide-react";
 import { api } from "@/lib/api";
 import { printInvoiceDoc, printDeliveryNote, type InvoiceDetail, type CompanyInfo } from "@/lib/print";
 import { rupiah, tanggal } from "@/lib/format";
@@ -88,6 +88,22 @@ export default function PenjualanPage() {
       else printDeliveryNote(detail, co);
     } catch (e) { setError(e instanceof Error ? e.message : "Gagal menyiapkan dokumen."); }
     finally { setPrinting(null); }
+  }
+
+  async function hapusPermanen(v: Invoice) {
+    if (!window.confirm(`HAPUS PERMANEN faktur ${v.number}?\n\nDokumen, jurnal, pembayaran & mutasi stoknya dihapus TOTAL tanpa jejak (stok dikembalikan). Khusus data uji. Hanya owner.`)) return;
+    try {
+      await api(`/invoices/${v.id}/hard`, { method: "DELETE" });
+      muat(true);
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
+  }
+
+  async function batalkan(v: Invoice) {
+    if (!window.confirm(`Batalkan faktur ${v.number}? Jurnal balik dibuat & stok dikembalikan. Hanya owner yang bisa melakukan ini.`)) return;
+    try {
+      await api(`/invoices/${v.id}/void`, { method: "POST" });
+      muat(true);
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal membatalkan."); }
   }
 
   function bukaForm() {
@@ -196,6 +212,16 @@ export default function PenjualanPage() {
                         <button onClick={() => cetak(v.id, "sj")} disabled={printing === v.id + "sj"}
                           title="Cetak surat jalan" className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink disabled:opacity-40">
                           <Truck size={15} />
+                        </button>
+                        {v.status !== "void" && Number(v.paid_total) === 0 && (
+                          <button onClick={() => batalkan(v)}
+                            title="Batalkan (void) — hanya owner" className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                            <Ban size={15} />
+                          </button>
+                        )}
+                        <button onClick={() => hapusPermanen(v)}
+                          title="Hapus permanen (data uji) — hanya owner" className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </td>

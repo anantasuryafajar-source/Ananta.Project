@@ -106,3 +106,44 @@ async def invoice_so(
         raise
     await db.refresh(so)
     return so
+
+
+# ============================= HAPUS (draft / uji) =============================
+@po_router.delete("/{po_id}")
+async def delete_po(
+    po_id: str,
+    user: User = Depends(require_roles()),  # owner
+    db: AsyncSession = Depends(get_db),
+):
+    po = (await db.execute(
+        select(PurchaseOrder).where(PurchaseOrder.id == po_id,
+                                    PurchaseOrder.company_id == user.company_id)
+    )).scalar_one_or_none()
+    if po is None:
+        raise HTTPException(status_code=404, detail="PO tidak ditemukan.")
+    if po.bill_id:
+        raise HTTPException(status_code=422,
+                            detail="PO sudah jadi Bill — hapus/void Bill-nya dulu.")
+    await db.delete(po)
+    await db.commit()
+    return {"ok": True}
+
+
+@so_router.delete("/{so_id}")
+async def delete_so(
+    so_id: str,
+    user: User = Depends(require_roles()),  # owner
+    db: AsyncSession = Depends(get_db),
+):
+    so = (await db.execute(
+        select(SalesOrder).where(SalesOrder.id == so_id,
+                                 SalesOrder.company_id == user.company_id)
+    )).scalar_one_or_none()
+    if so is None:
+        raise HTTPException(status_code=404, detail="SO tidak ditemukan.")
+    if so.invoice_id:
+        raise HTTPException(status_code=422,
+                            detail="SO sudah jadi Faktur — hapus/void fakturnya dulu.")
+    await db.delete(so)
+    await db.commit()
+    return {"ok": True}

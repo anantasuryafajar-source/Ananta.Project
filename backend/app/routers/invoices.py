@@ -98,3 +98,45 @@ async def create_invoice(
         raise
     await db.refresh(invoice)
     return invoice
+
+
+@router.post("/{invoice_id}/void")
+async def void_invoice_endpoint(
+    invoice_id: str,
+    user: User = Depends(require_roles()),  # absolut: hanya owner
+    db: AsyncSession = Depends(get_db),
+):
+    from ..services.void_service import void_invoice, VoidError
+    try:
+        inv = await void_invoice(db, company_id=user.company_id,
+                                 user_id=user.id, invoice_id=invoice_id)
+        await db.commit()
+    except (VoidError, JournalNotBalanced) as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        await db.rollback()
+        raise
+    return {"ok": True, "status": inv.status}
+
+
+@router.delete("/{invoice_id}/hard")
+async def hard_delete_invoice_endpoint(
+    invoice_id: str,
+    user: User = Depends(require_roles()),  # absolut: hanya owner
+    db: AsyncSession = Depends(get_db),
+):
+    """HAPUS PERMANEN (untuk data uji): dokumen, jurnal, pembayaran, dan
+    mutasi stok dihapus total; stok dikembalikan."""
+    from ..services.void_service import hard_delete_invoice, VoidError
+    try:
+        number = await hard_delete_invoice(db, company_id=user.company_id,
+                                           invoice_id=invoice_id)
+        await db.commit()
+    except VoidError as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        await db.rollback()
+        raise
+    return {"ok": True, "deleted": number}

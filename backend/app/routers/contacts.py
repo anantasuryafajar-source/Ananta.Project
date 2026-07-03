@@ -35,3 +35,56 @@ async def create_contact(
     await db.commit()
     await db.refresh(contact)
     return contact
+
+
+# ============================= EDIT & HAPUS =============================
+from fastapi import HTTPException
+from ..models import Invoice, Bill
+
+
+@router.patch("/{contact_id}", response_model=ContactOut)
+async def update_contact(
+    contact_id: str, body: ContactIn,
+    user: User = Depends(require_roles("sales", "finance")),
+    db: AsyncSession = Depends(get_db),
+):
+    contact = (await db.execute(
+        select(Contact).where(Contact.id == contact_id,
+                              Contact.company_id == user.company_id)
+    )).scalar_one_or_none()
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Kontak tidak ditemukan.")
+    for k, v in body.model_dump().items():
+        setattr(contact, k, v)
+    await db.commit()
+    await db.refresh(contact)
+    return contact
+
+
+@router.delete("/{contact_id}")
+async def delete_contact(
+    contact_id: str,
+    user: User = Depends(require_roles()),  # absolut: hanya owner
+    db: AsyncSession = Depends(get_db),
+):
+    contact = (await db.execute(
+        select(Contact).where(Contact.id == contact_id,
+                              Contact.company_id == user.company_id)
+    )).scalar_one_or_none()
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Kontak tidak ditemukan.")
+
+    used_inv = (await db.execute(
+        select(Invoice.id).where(Invoice.contact_id == contact_id).limit(1)
+    )).scalar_one_or_none()
+    used_bill = (await db.execute(
+        select(Bill.id).where(Bill.contact_id == contact_id).limit(1)
+    )).scalar_one_or_none()
+    if used_inv or used_bill:
+        raise HTTPException(
+            status_code=422,
+            detail="Kontak punya riwayat faktur/tagihan — tidak bisa dihapus "
+                   "(jejak transaksi harus utuh).")
+    await db.delete(contact)
+    await db.commit()
+    return {"ok": True}

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, type FormEvent } from "react";
-import { Plus, Upload } from "lucide-react";
+import { Plus, Upload, Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { readSheet } from "@/lib/excel";
 import { rupiah } from "@/lib/format";
@@ -26,6 +26,7 @@ export default function KontakPage() {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...KOSONG });
+  const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -70,8 +71,8 @@ export default function KontakPage() {
     setSaving(true);
     setFormError(null);
     try {
-      await api("/contacts", {
-        method: "POST",
+      await api(editId ? `/contacts/${editId}` : "/contacts", {
+        method: editId ? "PATCH" : "POST",
         body: JSON.stringify({
           type: form.type,
           name: form.name.trim(),
@@ -93,6 +94,27 @@ export default function KontakPage() {
     }
   }
 
+  function bukaEdit(c: Contact) {
+    setFormError(null);
+    setEditId(c.id);
+    setForm({
+      type: c.type, name: c.name,
+      npwp: (c as any).npwp ?? "", email: (c as any).email ?? "",
+      phone: c.phone ?? "", address: (c as any).address ?? "",
+      payment_term_days: String(c.payment_term_days ?? 0),
+      credit_limit: c.credit_limit ?? "0",
+    });
+    setOpen(true);
+  }
+
+  async function hapus(c: Contact) {
+    if (!window.confirm(`Hapus kontak "${c.name}"? Hanya bisa bila belum punya riwayat transaksi. Hanya owner.`)) return;
+    try {
+      await api(`/contacts/${c.id}`, { method: "DELETE" });
+      muat();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
+  }
+
   return (
     <>
       <Topbar title="Kontak" />
@@ -103,7 +125,7 @@ export default function KontakPage() {
           <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
             <Upload size={16} /> {importing ? "Mengimpor…" : "Import Excel"}
           </Button>
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={() => { setEditId(null); setForm({ ...KOSONG }); setFormError(null); setOpen(true); }}>
             <Plus size={16} /> Tambah Kontak
           </Button>
         </div>
@@ -125,6 +147,7 @@ export default function KontakPage() {
                   <th className="px-4 py-3 font-medium">Tipe</th>
                   <th className="px-4 py-3 font-medium">Termin</th>
                   <th className="px-4 py-3 text-right font-medium">Limit kredit</th>
+                  <th className="w-16" />
                 </tr>
               </thead>
               <tbody>
@@ -134,6 +157,18 @@ export default function KontakPage() {
                     <td className="px-4 py-3 text-ink-muted capitalize">{c.type}</td>
                     <td className="px-4 py-3 text-ink-muted">{c.payment_term_days} hari</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{rupiah(c.credit_limit)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => bukaEdit(c)} title="Edit kontak"
+                          className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-ink">
+                          <Pencil size={15} />
+                        </button>
+                        <button onClick={() => hapus(c)} title="Hapus (hanya bila tanpa riwayat; owner)"
+                          className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -142,7 +177,7 @@ export default function KontakPage() {
         )}
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Tambah Kontak">
+      <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Edit Kontak" : "Tambah Kontak"}>
         <form onSubmit={simpan} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Tipe">

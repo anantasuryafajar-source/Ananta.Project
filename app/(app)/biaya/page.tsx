@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Wallet } from "lucide-react";
+import { Plus, Wallet, Ban, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { rupiah, tanggal } from "@/lib/format";
 import { Topbar } from "@/components/ananta/topbar";
@@ -96,6 +96,22 @@ export default function BiayaPage() {
     finally { setSaving(false); }
   }
 
+  async function hapusBeban(x: Expense) {
+    if (!window.confirm(`HAPUS PERMANEN beban ${x.number}? Jurnalnya ikut terhapus. Khusus data uji. Hanya owner.`)) return;
+    try {
+      await api(`/expenses/${x.id}/hard`, { method: "DELETE" });
+      muat();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
+  }
+
+  async function batalkanBeban(x: Expense) {
+    if (!window.confirm(`Batalkan beban ${x.number}? Jurnal balik dibuat. Hanya owner.`)) return;
+    try {
+      await api(`/expenses/${x.id}/void`, { method: "POST" });
+      muat();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal membatalkan."); }
+  }
+
   const sisa = (l: Loan) => Number(l.amount) - Number(l.repaid_total);
 
   return (
@@ -129,6 +145,7 @@ export default function BiayaPage() {
                 <th className="px-4 py-3 font-medium">Kategori</th>
                 <th className="px-4 py-3 font-medium">Deskripsi</th>
                 <th className="px-4 py-3 text-right font-medium">Nominal</th>
+                <th className="w-12" />
               </tr></thead>
               <tbody>
                 {expenses.map((x) => (
@@ -138,6 +155,20 @@ export default function BiayaPage() {
                     <td className="px-4 py-3 capitalize text-ink-muted">{x.category}</td>
                     <td className="px-4 py-3 text-ink">{x.description}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{rupiah(x.amount)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        {x.category !== "void" && (
+                          <button onClick={() => batalkanBeban(x)} title="Batalkan (void) — hanya owner"
+                            className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                            <Ban size={15} />
+                          </button>
+                        )}
+                        <button onClick={() => hapusBeban(x)} title="Hapus permanen (data uji) — hanya owner"
+                          className="rounded p-1 text-ink-subtle hover:bg-surface-sunken hover:text-danger">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {expenses.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-subtle">Belum ada beban tercatat. Catat BBM, perawatan armada, listrik, dll — jurnal otomatis.</td></tr>}
