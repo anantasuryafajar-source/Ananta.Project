@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     SEED_ADMIN_PASSWORD: str = "admin12345"
     SEED_COMPANY_NAME: str = "Bisnisku"
 
+    # Email (Resend) untuk reset kata sandi
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "noreply@anantaasf.com"
+    APP_URL: str = "https://anantaasf.com"
+
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
 

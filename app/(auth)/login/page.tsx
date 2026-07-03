@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { login } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,9 @@ export default function LoginPage() {
           <Button onClick={submit} disabled={loading} className="w-full">
             {loading ? "Memproses…" : "Masuk"}
           </Button>
+          <p className="pt-1 text-center text-caption">
+            <Link href="/forgot-password" className="text-primary hover:underline">Lupa kata sandi?</Link>
+          </p>
         </div>
       </div>
     </main>
