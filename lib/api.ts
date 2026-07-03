@@ -25,7 +25,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     const detail = await res.json().catch(() => ({}));
     throw new Error(detail.detail ?? `Gagal memuat (${res.status})`);
   }
-  return res.json() as Promise<T>;
+  // 204 No Content atau body kosong (mis. DELETE) -> tidak ada JSON untuk di-parse
+  if (res.status === 204) return null as T;
+  const text = await res.text();
+  if (!text) return null as T;
+  return JSON.parse(text) as T;
 }
 
 export async function login(email: string, password: string) {
