@@ -4,7 +4,6 @@ name: Backup Database Harian
 on:
   schedule:
     # Tiap hari 17:00 UTC = 00:00 WIB (tengah malam Indonesia Barat).
-    # Format cron: menit jam * * *
     - cron: "0 17 * * *"
   workflow_dispatch:   # tombol "Run workflow" untuk jalankan manual kapan saja
 
@@ -29,8 +28,13 @@ jobs:
           mkdir -p backups
           STAMP=$(date +%Y-%m-%d-%H%M)
           FILE="backups/ananta-${STAMP}.dump"
+          # Panggil pg_dump v17 SECARA EKSPLISIT lewat path lengkap,
+          # supaya tidak tertukar dengan pg_dump v16 bawaan sistem.
+          PGDUMP="/usr/lib/postgresql/17/bin/pg_dump"
+          echo "Versi pg_dump yang dipakai:"
+          "${PGDUMP}" --version
           echo "Membuat backup: ${FILE}"
-          pg_dump "${DATABASE_URL}" -Fc -f "${FILE}"
+          "${PGDUMP}" "${DATABASE_URL}" -Fc -f "${FILE}"
           ls -lh "${FILE}"
           echo "STAMP=${STAMP}" >> "$GITHUB_ENV"
 
