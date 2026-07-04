@@ -21,6 +21,54 @@ from .state import clear_state, load_state, set_state
 # Peran yang boleh menambah produk (owner selalu lolos).
 PRODUCT_ROLES = {"warehouse", "finance", "sales"}
 
+# Contoh format sekali-kirim untuk /tambah_produk.
+PRODUCT_FORMAT_HINT = (
+    "Format cepat (kirim sekaligus):\n"
+    "/tambah_produk\n"
+    "SKU: EBN\n"
+    "Nama: MINUMAN EBEN\n"
+    "Satuan: botol\n"
+    "Harga: 0"
+)
+
+
+def _parse_price(text: str):
+    """Ubah teks harga jadi Decimal. Kembalikan None bila tidak valid."""
+    cleaned = (text or "").replace(".", "").replace(",", "").replace(" ", "").strip()
+    if cleaned == "":
+        return Decimal("0")
+    try:
+        price = Decimal(cleaned)
+    except (InvalidOperation, ValueError):
+        return None
+    if price < 0:
+        return None
+    return price
+
+
+def parse_product_block(block: str) -> dict:
+    """Parse blok multi-baris 'Kunci: Nilai' jadi dict field produk.
+
+    Toleran: tanda '-' di depan, spasi bebas, kunci Indonesia/Inggris.
+    """
+    out: dict = {}
+    for raw in block.splitlines():
+        line = raw.strip().lstrip("-").strip()
+        if not line or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key == "sku":
+            out["sku"] = val[:40]
+        elif key in ("nama", "name"):
+            out["name"] = val[:200]
+        elif key in ("satuan", "unit"):
+            out["unit"] = val[:20]
+        elif key in ("harga", "harga jual", "price"):
+            out["price_raw"] = val
+    return out
+
 
 async def _linked_user(db, chat_id: int) -> User | None:
     link = (
@@ -51,9 +99,10 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Perintah tersedia:\n"
         "/link - tautkan akun Telegram ke Ananta\n"
-        "/tambah_produk - tambah produk baru\n"
+        "/tambah_produk - tambah produk baru (terpandu atau sekali-kirim)\n"
         "/batal - batalkan input yang sedang berjalan\n"
-        "/bantuan - tampilkan bantuan ini"
+        "/bantuan - tampilkan bantuan ini\n\n"
+        + PRODUCT_FORMAT_HINT
     )
 
 
@@ -106,6 +155,11 @@ async def cmd_batal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_tambah_produk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
+    full_text = update.message.text or ""
+    # Pisahkan token perintah dari sisa pesan (bisa multi-baris).
+    parts = full_text.split(None, 1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+
     async with SessionLocal() as db:
         u = await _linked_user(db, chat_id)
         if u is None:
@@ -115,10 +169,47 @@ async def cmd_tambah_produk(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if "owner" not in roles and not roles.intersection(PRODUCT_ROLES):
             await update.message.reply_text("Kamu tidak punya akses menambah produk.")
             return
+
+        # --- Mode sekali-kirim: ada blok format di bawah perintah ---
+        if body:
+            fields = parse_product_block(body)
+            missing = [k for k in ("sku", "name") if not fields.get(k)]
+            if missing:
+                label = {"sku": "SKU", "name": "Nama"}
+                await update.message.reply_text(
+                    "Format kurang lengkap. Wajib ada "
+                    + " dan ".join(label[m] for m in missing)
+                    + ".\n\n"
+                    + PRODUCT_FORMAT_HINT
+                )
+                return
+            price = _parse_price(fields.get("price_raw", "0"))
+            if price is None:
+                await update.message.reply_text(
+                    "Harga tidak valid. Masukkan angka saja, mis. 250000 atau 0."
+                )
+                return
+            prod = await create_product(
+                db,
+                company_id=u.company_id,
+                sku=fields["sku"],
+                name=fields["name"],
+                unit=fields.get("unit", "pcs"),
+                sale_price=price,
+            )
+            await clear_state(db, chat_id)  # jaga-jaga bila ada alur menggantung
+            await update.message.reply_text(
+                f"Tersimpan: {prod.name} ({prod.sku}), satuan {prod.unit}, harga {price}.\n"
+                "Cek di web Ananta -> menu Produk."
+            )
+            return
+
+        # --- Mode terpandu: perintah dikirim polos ---
         await set_state(db, chat_id, "add_product", "sku", {})
     await update.message.reply_text(
         "Tambah produk baru.\nMasukkan SKU (mis. MNS-WHK):\n\n"
-        "(ketik /batal kapan saja untuk membatalkan)"
+        "(ketik /batal kapan saja untuk membatalkan)\n\n"
+        "Atau lain kali kirim sekaligus:\n" + PRODUCT_FORMAT_HINT
     )
 
 
@@ -149,12 +240,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     "Harga jual (angka saja, mis. 250000). Ketik 0 bila belum ada:"
                 )
             elif st.step == "sale_price":
-                cleaned = text.replace(".", "").replace(",", "").replace(" ", "")
-                try:
-                    price = Decimal(cleaned)
-                    if price < 0:
-                        raise InvalidOperation()
-                except (InvalidOperation, ValueError):
+                price = _parse_price(text)
+                if price is None:
                     await update.message.reply_text(
                         "Harga tidak valid. Masukkan angka saja, mis. 250000:"
                     )
