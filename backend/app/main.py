@@ -10,28 +10,12 @@ from .routers import (
     bulk_import, journals, audit, reconcile,
     # --- modul keuangan lanjutan ---
     investors, expenses,
-    # --- Bot Telegram (langkah 1) ---
-    telegram as telegram_router,
 )
-import logging
-from .bot.application import startup_bot, shutdown_bot
-
-_bot_log = logging.getLogger("ananta.bot")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Bot Telegram bersifat OPSIONAL. Kegagalan apa pun di sini TIDAK boleh
-    # membuat API akuntansi crash (healthcheck /health harus tetap lolos).
-    try:
-        await startup_bot()
-    except Exception as e:  # pragma: no cover
-        _bot_log.warning("Bot Telegram gagal start; API tetap jalan: %s", e)
     yield
-    try:
-        await shutdown_bot()
-    except Exception:  # pragma: no cover
-        pass
 
 
 app = FastAPI(
@@ -72,9 +56,6 @@ app.include_router(bulk_import.router, prefix=API)
 app.include_router(journals.router, prefix=API)
 app.include_router(audit.router, prefix=API)
 app.include_router(reconcile.router, prefix=API)
-
-# Bot Telegram: webhook di-mount TANPA prefix /api/v1 (Telegram POST ke URL bersih).
-app.include_router(telegram_router.router)
 
 
 @app.get("/health", tags=["meta"])
