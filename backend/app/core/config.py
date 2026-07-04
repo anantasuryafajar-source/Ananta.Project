@@ -25,6 +25,16 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # --- Bot Telegram (langkah 1) ---
+    # Token dari BotFather. Kalau kosong, bot dimatikan total (API tetap jalan).
+    TELEGRAM_BOT_TOKEN: str = ""
+    # Secret acak untuk memverifikasi webhook benar-benar dari Telegram.
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+    # URL publik backend ini di Railway, mis. https://ananta-api-production-e77c.up.railway.app
+    BACKEND_PUBLIC_URL: str = ""
+    # Chat ID Telegram owner untuk bootstrap penautan pertama (sementara).
+    TELEGRAM_OWNER_CHAT_ID: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
