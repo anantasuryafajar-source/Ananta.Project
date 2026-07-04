@@ -18,6 +18,8 @@ from .orders import PurchaseOrder, POLine, SalesOrder, SOLine
 # --- Modul keuangan lanjutan (step 2-3) ---
 from .investor import Investor, InvestorPayout
 from .expense import Expense, EmployeeLoan
+# --- Bot Telegram (langkah 1) ---
+from .telegram import TelegramLink, TelegramSession
 
 __all__ = [
     "Base", "Company", "Warehouse", "User", "Role", "UserRole",
@@ -29,4 +31,5 @@ __all__ = [
     "PurchaseOrder", "POLine", "SalesOrder", "SOLine",
     "Investor", "InvestorPayout",
     "Expense", "EmployeeLoan",
+    "TelegramLink", "TelegramSession",
 ]

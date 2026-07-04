@@ -18,6 +18,7 @@ dependencies = [
   "redis>=5.2",
   "python-multipart>=0.0.20",
   "httpx>=0.28",
+  "python-telegram-bot>=21,<22",
 ]
 
 [dependency-groups]
@@ -29,3 +30,4 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]
