@@ -223,6 +223,37 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         draft = json.loads(st.draft or "{}")
 
         if st.flow == "add_product":
+            # Jika user MENEMPEL blok format lengkap (ada SKU + Nama) di tengah
+            # alur terpandu, kenali dan proses sekaligus -- jangan diperlakukan
+            # sebagai satu jawaban langkah.
+            blok = parse_product_block(text)
+            if blok.get("sku") and blok.get("name"):
+                u = await _linked_user(db, chat_id)
+                if u is None:
+                    await clear_state(db, chat_id)
+                    await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
+                    return
+                price = _parse_price(blok.get("price_raw", "0"))
+                if price is None:
+                    await update.message.reply_text(
+                        "Harga tidak valid. Masukkan angka saja, mis. 250000 atau 0."
+                    )
+                    return
+                prod = await create_product(
+                    db,
+                    company_id=u.company_id,
+                    sku=blok["sku"],
+                    name=blok["name"],
+                    unit=blok.get("unit", "pcs"),
+                    sale_price=price,
+                )
+                await clear_state(db, chat_id)
+                await update.message.reply_text(
+                    f"Tersimpan: {prod.name} ({prod.sku}), satuan {prod.unit}, harga {price}.\n"
+                    "Cek di web Ananta -> menu Produk."
+                )
+                return
+
             if st.step == "sku":
                 draft["sku"] = text[:40]
                 await set_state(db, chat_id, "add_product", "name", draft)
