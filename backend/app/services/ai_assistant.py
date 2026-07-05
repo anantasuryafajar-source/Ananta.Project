@@ -135,6 +135,13 @@ def normalize_effort(effort: str | None) -> str:
     return effort if effort in EFFORT_BUDGET else DEFAULT_EFFORT
 
 
+async def _post(payload: dict, headers: dict) -> dict:
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(API_URL, headers=headers, json=payload)
+        r.raise_for_status()
+        return r.json()
+
+
 async def _call_api(messages: list, model: str, effort: str) -> dict:
     headers = {
         "x-api-key": settings.ANTHROPIC_API_KEY,
@@ -142,21 +149,24 @@ async def _call_api(messages: list, model: str, effort: str) -> dict:
         "content-type": "application/json",
     }
     budget = EFFORT_BUDGET[effort]
-    # max_tokens harus > budget thinking bila thinking aktif.
-    max_tokens = 1500 + budget
     payload = {
         "model": model,
-        "max_tokens": max_tokens,
+        "max_tokens": 1500 + budget,
         "system": SYSTEM_PROMPT,
         "tools": TOOLS,
         "messages": messages,
     }
     if budget > 0:
         payload["thinking"] = {"type": "enabled", "budget_tokens": budget}
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(API_URL, headers=headers, json=payload)
-        r.raise_for_status()
-        return r.json()
+    try:
+        return await _post(payload, headers)
+    except httpx.HTTPStatusError as e:
+        # Bila extended thinking ditolak (400), ulangi tanpa thinking.
+        if e.response.status_code == 400 and "thinking" in payload:
+            payload.pop("thinking", None)
+            payload["max_tokens"] = 1500
+            return await _post(payload, headers)
+        raise
 
 
 async def answer(history: list[dict], company_id: str, model=None, effort=None) -> str:
@@ -185,8 +195,22 @@ async def answer(history: list[dict], company_id: str, model=None, effort=None) 
             messages.append({"role": "user", "content": results})
         return "Analisis terlalu panjang; coba persempit pertanyaannya."
     except httpx.HTTPStatusError as e:  # pragma: no cover
-        log.warning("API AI error: %s | %s", e, getattr(e, "response", None) and e.response.text[:300])
-        return "Maaf, layanan AI sedang bermasalah (galat API)."
+        detail = ""
+        try:
+            j = e.response.json()
+            detail = (j.get("error", {}) or {}).get("message", "") or ""
+        except Exception:
+            detail = (e.response.text or "")[:300]
+        status = e.response.status_code
+        log.warning("API AI %s: %s", status, detail)
+        hint = ""
+        if status in (401, 403):
+            hint = " (cek ANTHROPIC_API_KEY di Railway — mungkin salah/di-revoke)"
+        elif status == 400 and "credit" in detail.lower():
+            hint = " (saldo/billing API Anthropic belum cukup)"
+        elif status == 404 and "model" in detail.lower():
+            hint = " (nama model tidak dikenal akunmu — ganti model)"
+        return f"Galat API {status}: {detail or 'tidak diketahui'}{hint}"
     except Exception as e:  # pragma: no cover
         log.warning("AI gagal: %s", e)
         return "Maaf, terjadi kesalahan saat menganalisis."

@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, ArrowUp, Plus, Trash2, PanelLeft } from "lucide-react";
+import {
+  Sparkles, ArrowUp, Plus, Trash2, PanelLeft, ChevronDown,
+} from "lucide-react";
 import { api } from "@/lib/api";
 
 /**
@@ -17,6 +19,7 @@ const CONTOH = [
   "Bagaimana laba rugi bulan ini?",
   "Siapa customer dengan piutang terbesar?",
   "Berapa nilai persediaan saat ini?",
+  "Bandingkan omzet lempar vs collect.",
 ];
 
 export default function AsistenPage() {
@@ -39,7 +42,7 @@ export default function AsistenPage() {
     try {
       setConvs(await api<Conv[]>("/ai/conversations"));
     } catch {
-      /* endpoint belum ada -> biarkan kosong */
+      /* endpoint belum ada -> kosong */
     }
   }, []);
 
@@ -47,17 +50,13 @@ export default function AsistenPage() {
     (async () => {
       try {
         const cfg = await api<{
-          models: Opt[];
-          default_model: string;
-          efforts: Opt[];
-          default_effort: string;
+          models: Opt[]; default_model: string; efforts: Opt[]; default_effort: string;
         }>("/ai/config");
         setModels(cfg.models);
         setEfforts(cfg.efforts);
         setModel(cfg.default_model);
         setEffort(cfg.default_effort);
       } catch {
-        /* fallback statis bila backend belum ada */
         setModels([{ id: "claude-sonnet-5", label: "Sonnet (seimbang)" }]);
         setEfforts([
           { id: "low", label: "Rendah" },
@@ -87,24 +86,21 @@ export default function AsistenPage() {
     setMessages([]);
     try {
       setMessages(await api<Msg[]>(`/ai/conversations/${id}/messages`));
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }
 
   function newChat() {
     setActiveId(null);
     setMessages([]);
     setInput("");
+    taRef.current?.focus();
   }
 
   async function removeConv(id: string, e: React.MouseEvent) {
     e.stopPropagation();
     try {
       await api(`/ai/conversations/${id}`, { method: "DELETE" });
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     if (activeId === id) newChat();
     loadConvs();
   }
@@ -120,15 +116,7 @@ export default function AsistenPage() {
     try {
       const res = await api<{ conversation_id: string; title: string; reply: string }>(
         "/ai/chat",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            conversation_id: activeId,
-            message: q,
-            model,
-            effort,
-          }),
-        },
+        { method: "POST", body: JSON.stringify({ conversation_id: activeId, message: q, model, effort }) },
       );
       setMessages([...next, { role: "assistant", content: res.reply }]);
       if (!activeId) {
@@ -157,25 +145,29 @@ export default function AsistenPage() {
       {/* Panel riwayat */}
       {panel && (
         <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-surface md:flex">
-          <div className="p-3">
+          <div className="px-3 pt-4">
             <button
               onClick={newChat}
-              className="flex w-full items-center justify-center gap-2 rounded-[var(--radius-button)] bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--primary-hover)]"
+              className="flex w-full items-center gap-2 rounded-[var(--radius-button)] border border-line bg-surface px-3 py-2.5 text-sm font-medium text-ink shadow-[var(--shadow-pop)] transition-colors hover:border-primary hover:bg-[var(--primary-soft)]"
             >
-              <Plus size={16} /> Chat baru
+              <Plus size={16} className="text-primary" />
+              Percakapan baru
             </button>
           </div>
-          <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+          <p className="px-5 pb-1 pt-5 text-caption font-medium uppercase tracking-wide text-ink-subtle">
+            Riwayat
+          </p>
+          <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
             {convs.length === 0 && (
-              <p className="px-2 py-4 text-caption text-ink-subtle">Belum ada percakapan.</p>
+              <p className="px-3 py-3 text-sm text-ink-subtle">Belum ada percakapan.</p>
             )}
             {convs.map((c) => (
               <div
                 key={c.id}
                 onClick={() => openConv(c.id)}
-                className={`group flex cursor-pointer items-center gap-2 rounded-[var(--radius-input)] px-3 py-2 text-sm ${
+                className={`group flex cursor-pointer items-center gap-2 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-colors ${
                   activeId === c.id
-                    ? "bg-[var(--primary-soft)] text-ink"
+                    ? "bg-[var(--primary-soft)] font-medium text-ink"
                     : "text-ink-muted hover:bg-surface-sunken"
                 }`}
               >
@@ -183,7 +175,7 @@ export default function AsistenPage() {
                 <button
                   onClick={(e) => removeConv(c.id, e)}
                   aria-label="Hapus"
-                  className="shrink-0 text-ink-subtle opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+                  className="shrink-0 rounded p-0.5 text-ink-subtle opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -200,18 +192,17 @@ export default function AsistenPage() {
           <button
             onClick={() => setPanel((p) => !p)}
             aria-label="Riwayat"
-            className="hidden rounded-[var(--radius-input)] p-1.5 text-ink-muted hover:bg-surface-sunken md:block"
+            className="hidden rounded-[var(--radius-input)] p-2 text-ink-muted transition-colors hover:bg-surface-sunken md:block"
           >
             <PanelLeft size={18} />
           </button>
-          <span className="grid h-9 w-9 place-items-center rounded-[var(--radius-input)] bg-[var(--primary-soft)] text-primary">
-            <Sparkles size={18} />
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--primary-soft)] text-primary">
+            <Sparkles size={17} />
           </span>
-          <div className="flex-1">
-            <h1 className="font-display text-base font-bold leading-none text-ink">Asisten AI</h1>
-            <p className="mt-0.5 text-caption text-ink-subtle">Berbasis data Ananta</p>
+          <div className="flex-1 leading-tight">
+            <h1 className="font-display text-[15px] font-bold text-ink">Asisten AI</h1>
+            <p className="text-caption text-ink-subtle">Berbasis data Ananta</p>
           </div>
-          {/* Dropdown model & effort */}
           <div className="flex items-center gap-2">
             <Select value={model} onChange={setModel} options={models} />
             <Select value={effort} onChange={setEffort} options={efforts} />
@@ -220,22 +211,25 @@ export default function AsistenPage() {
 
         {/* Thread */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-4 py-6">
+          <div className="mx-auto w-full max-w-3xl px-4 py-8">
             {empty ? (
-              <div className="mt-10 flex flex-col items-center text-center">
-                <span className="grid h-14 w-14 place-items-center rounded-full bg-[var(--primary-soft)] text-primary">
-                  <Sparkles size={26} />
+              <div className="mx-auto mt-8 flex max-w-xl flex-col items-center text-center">
+                <span className="grid h-16 w-16 place-items-center rounded-2xl bg-[var(--primary-soft)] text-primary shadow-[var(--shadow-pop)]">
+                  <Sparkles size={28} />
                 </span>
-                <h2 className="mt-4 font-display text-xl font-bold text-ink">Ada yang bisa dibantu?</h2>
-                <p className="mt-1 max-w-md text-sm text-ink-muted">
-                  Tanyakan apa saja tentang keuangan bisnismu. Asisten membaca data riil untuk menjawab.
+                <h2 className="mt-5 font-display text-2xl font-bold text-ink">
+                  Ada yang bisa dibantu?
+                </h2>
+                <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-muted">
+                  Tanyakan apa saja tentang keuangan bisnismu. Asisten membaca data riil
+                  — laba rugi, piutang, stok — untuk menjawab.
                 </p>
-                <div className="mt-6 flex w-full max-w-md flex-col gap-2">
+                <div className="mt-7 grid w-full gap-2.5 sm:grid-cols-2">
                   {CONTOH.map((c) => (
                     <button
                       key={c}
                       onClick={() => send(c)}
-                      className="rounded-[var(--radius-input)] border border-line bg-surface px-4 py-3 text-left text-sm text-ink transition-colors hover:border-primary hover:bg-surface-sunken"
+                      className="rounded-[var(--radius-button)] border border-line bg-surface px-4 py-3 text-left text-sm text-ink shadow-[var(--shadow-pop)] transition-all hover:-translate-y-0.5 hover:border-primary"
                     >
                       {c}
                     </button>
@@ -243,7 +237,7 @@ export default function AsistenPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-6">
                 {messages.map((m, i) => (
                   <Bubble key={i} msg={m} />
                 ))}
@@ -254,28 +248,25 @@ export default function AsistenPage() {
         </div>
 
         {/* Composer */}
-        <div className="border-t border-line bg-surface px-4 py-3">
+        <div className="bg-gradient-to-t from-[var(--canvas)] to-transparent px-4 pb-4 pt-2">
           <div className="mx-auto w-full max-w-3xl">
-            <div className="flex items-end gap-2 rounded-[var(--radius-button)] border border-line bg-surface-sunken px-3 py-2 focus-within:border-primary focus-within:bg-surface">
+            <div className="flex items-end gap-2 rounded-2xl border border-line bg-surface px-3 py-2 shadow-[var(--shadow-pop)] transition-colors focus-within:border-primary">
               <textarea
                 ref={taRef}
                 rows={1}
                 value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  grow();
-                }}
+                onChange={(e) => { setInput(e.target.value); grow(); }}
                 onKeyDown={onKey}
                 placeholder="Tulis pertanyaan…"
-                className="max-h-[200px] flex-1 resize-none bg-transparent py-1.5 text-sm text-ink outline-none placeholder:text-ink-subtle"
+                className="max-h-[200px] flex-1 resize-none bg-transparent py-1.5 text-[15px] text-ink outline-none placeholder:text-ink-subtle"
               />
               <button
                 onClick={() => send(input)}
                 disabled={!input.trim() || loading}
                 aria-label="Kirim"
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-white transition-colors hover:bg-[var(--primary-hover)] disabled:opacity-40"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-white transition-colors hover:bg-[var(--primary-hover)] disabled:opacity-40"
               >
-                <ArrowUp size={16} />
+                <ArrowUp size={17} />
               </button>
             </div>
             <p className="mt-2 text-center text-caption text-ink-subtle">
@@ -288,27 +279,33 @@ export default function AsistenPage() {
   );
 }
 
-function Select({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: Opt[];
+function Select({ value, onChange, options }: {
+  value: string; onChange: (v: string) => void; options: Opt[];
 }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="rounded-[var(--radius-input)] border border-line bg-surface px-2 py-1.5 text-caption text-ink outline-none focus:border-primary"
-    >
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="appearance-none rounded-[var(--radius-input)] border border-line bg-surface py-1.5 pl-3 pr-7 text-caption text-ink-muted outline-none transition-colors hover:border-primary focus:border-primary"
+      >
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>{o.label}</option>
+        ))}
+      </select>
+      <ChevronDown
+        size={13}
+        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-subtle"
+      />
+    </div>
+  );
+}
+
+function Avatar() {
+  return (
+    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-primary">
+      <Sparkles size={15} />
+    </span>
   );
 }
 
@@ -316,7 +313,7 @@ function Bubble({ msg }: { msg: Msg }) {
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-button)] bg-[var(--primary-soft)] px-4 py-2.5 text-sm text-ink">
+        <div className="max-w-[82%] whitespace-pre-wrap rounded-2xl bg-[var(--primary-soft)] px-4 py-2.5 text-[15px] leading-relaxed text-ink">
           {msg.content}
         </div>
       </div>
@@ -324,10 +321,10 @@ function Bubble({ msg }: { msg: Msg }) {
   }
   return (
     <div className="flex gap-3">
-      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-primary">
-        <Sparkles size={15} />
-      </span>
-      <div className="whitespace-pre-wrap pt-0.5 text-sm leading-relaxed text-ink">{msg.content}</div>
+      <Avatar />
+      <div className="min-w-0 flex-1 whitespace-pre-wrap pt-0.5 text-[15px] leading-relaxed text-ink">
+        {msg.content}
+      </div>
     </div>
   );
 }
@@ -335,14 +332,12 @@ function Bubble({ msg }: { msg: Msg }) {
 function Thinking() {
   return (
     <div className="flex gap-3">
-      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-primary">
-        <Sparkles size={15} />
-      </span>
-      <div className="flex items-center gap-1.5 pt-2">
-        {["0ms", "150ms", "300ms"].map((d) => (
+      <Avatar />
+      <div className="flex items-center gap-1.5 pt-2.5">
+        {["0ms", "160ms", "320ms"].map((d) => (
           <span
             key={d}
-            className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--ink-subtle)]"
+            className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary"
             style={{ animationDelay: d }}
           />
         ))}
