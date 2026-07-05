@@ -74,3 +74,17 @@ HP: 081234567890"""
     assert f["name"] == "PT Sumber Minuman"
     assert resolve_contact_type(f["type_raw"]) == "supplier"
     assert f["phone"] == "081234567890"
+
+
+def test_parse_loan_block():
+    from app.bot.parsing import parse_loan_block, parse_amount, resolve_payment_account, DEFAULT_PAID_CODE
+    block = """Nama: Budi
+Jumlah: 500.000
+Bayar: bca"""
+    f = parse_loan_block(block)
+    assert f["name"] == "Budi"
+    assert parse_amount(f["amount_raw"]) == Decimal("500000")
+    assert resolve_payment_account(f["paid_raw"]) == "1-1110"
+    # tanpa bayar -> default kas
+    f2 = parse_loan_block("Nama: Ani\nJumlah: 100000")
+    assert (resolve_payment_account(f2.get("paid_raw", "")) or DEFAULT_PAID_CODE) == "1-1000"

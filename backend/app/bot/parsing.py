@@ -168,3 +168,23 @@ def parse_contact_block(block: str) -> dict:
         elif key in ("hp", "telp", "telpon", "telepon", "phone", "no", "nomor"):
             out["phone"] = val[:40]
     return out
+
+
+# ===================== KASBON (pinjaman karyawan) =====================
+def parse_loan_block(block: str) -> dict:
+    """Parse blok 'Kunci: Nilai' untuk kasbon sekali-kirim."""
+    out: dict = {}
+    for raw in block.splitlines():
+        line = raw.strip().lstrip("-").strip()
+        if not line or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key in ("nama", "name", "karyawan"):
+            out["name"] = val[:120]
+        elif key in ("jumlah", "amount", "nominal"):
+            out["amount_raw"] = val
+        elif key in ("bayar", "sumber", "dari"):
+            out["paid_raw"] = val
+    return out

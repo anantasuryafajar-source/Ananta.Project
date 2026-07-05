@@ -20,6 +20,7 @@ from ..models import Role, TelegramLink, User, UserRole
 from ..services.product_service import create_product
 from ..services.contact_service import create_contact
 from ..services.expense_service import create_expense
+from ..services.expense_service import create_loan
 from ..services.journal import JournalNotBalanced
 from .parsing import (
     CONTACT_TYPES,
@@ -30,6 +31,7 @@ from .parsing import (
     parse_amount,
     parse_contact_block,
     parse_expense_block,
+    parse_loan_block,
     resolve_contact_type,
     resolve_expense_account,
     resolve_payment_account,
@@ -40,6 +42,15 @@ from .state import clear_state, load_state, set_state
 PRODUCT_ROLES = {"warehouse", "finance", "sales"}
 EXPENSE_ROLES = {"finance"}
 CONTACT_ROLES = {"sales", "finance"}
+KASBON_ROLES = {"finance"}
+
+KASBON_FORMAT_HINT = (
+    "Format cepat (kirim sekaligus):\n"
+    "/kasbon\n"
+    "Nama: Budi\n"
+    "Jumlah: 500000\n"
+    "Bayar: kas"
+)
 
 CONTACT_FORMAT_HINT = (
     "Format cepat (kirim sekaligus):\n"
@@ -166,6 +177,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/tambah_produk - tambah produk baru (terpandu atau sekali-kirim)\n"
         "/tambah_pengeluaran - catat pengeluaran (terpandu atau sekali-kirim)\n"
         "/tambah_kontak - tambah customer/supplier (terpandu atau sekali-kirim)\n"
+        "/kasbon - catat kasbon karyawan (terpandu atau sekali-kirim)\n"
         "/batal - batalkan input yang sedang berjalan\n"
         "/bantuan - tampilkan bantuan ini\n\n"
         + PRODUCT_FORMAT_HINT
@@ -580,6 +592,52 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
 
+        elif st.flow == "add_loan":
+            if st.step == "name":
+                draft["name"] = text[:120]
+                await set_state(db, chat_id, "add_loan", "amount", draft)
+                await update.message.reply_text("Jumlah kasbon (angka, mis. 500000):")
+            elif st.step == "amount":
+                amount = parse_amount(text)
+                if amount is None:
+                    await update.message.reply_text(
+                        "Jumlah tidak valid. Masukkan angka, mis. 500000:"
+                    )
+                    return
+                draft["amount"] = str(amount)
+                await set_state(db, chat_id, "add_loan", "paid", draft)
+                await update.message.reply_text(
+                    _menu("Dibayar dari mana? (ketik nomor):", PAYMENT_ACCOUNTS)
+                )
+            elif st.step == "paid":
+                idx = _pick_index(text, len(PAYMENT_ACCOUNTS))
+                if idx is None:
+                    await update.message.reply_text("Ketik nomor yang valid dari daftar:")
+                    return
+                draft["paid_code"] = PAYMENT_ACCOUNTS[idx][0]
+                await set_state(db, chat_id, "add_loan", "confirm", draft)
+                await update.message.reply_text(
+                    "Konfirmasi kasbon:\n"
+                    f"- Nama   : {draft['name']}\n"
+                    f"- Jumlah : Rp{draft['amount']}\n"
+                    f"- Bayar  : {draft['paid_code']}\n\n"
+                    "Ketik YA untuk simpan, atau /batal."
+                )
+            elif st.step == "confirm":
+                if text.lower() in ("ya", "y", "iya"):
+                    u = await _linked_user(db, chat_id)
+                    if u is None:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
+                        return
+                    msg = await _do_create_loan(
+                        db, u, draft["name"], Decimal(draft["amount"]), draft["paid_code"]
+                    )
+                    await clear_state(db, chat_id)
+                    await update.message.reply_text(msg)
+                else:
+                    await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
+
 
 async def _do_create_expense(db, u, amount, description, exp_code, paid_code):
     on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()  # tanggal WIB
@@ -709,6 +767,81 @@ async def cmd_tambah_kontak(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 
+async def _do_create_loan(db, u, employee_name, amount, paid_code):
+    on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()  # WIB
+    try:
+        loan = await create_loan(
+            db,
+            company_id=u.company_id,
+            user_id=u.id,
+            employee_name=employee_name,
+            on_date=on_date,
+            amount=amount,
+            paid_account_code=paid_code,
+            note=None,
+        )
+        await db.commit()
+    except (JournalNotBalanced, ValueError) as e:
+        await db.rollback()
+        return f"Gagal: {e}"
+    except Exception:
+        await db.rollback()
+        return "Gagal menyimpan kasbon (kesalahan tak terduga)."
+    await db.refresh(loan)
+    return (
+        f"Kasbon tersimpan: {loan.number}\n"
+        f"{employee_name} - Rp{amount}\n"
+        f"Dibayar dari {paid_code}.\n"
+        "Cek di web Ananta -> menu Kasbon."
+    )
+
+
+async def cmd_kasbon(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    full_text = update.message.text or ""
+    parts = full_text.split(None, 1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+
+    async with SessionLocal() as db:
+        u = await _linked_user(db, chat_id)
+        if u is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, u.id)
+        if "owner" not in roles and not roles.intersection(KASBON_ROLES):
+            await update.message.reply_text("Kamu tidak punya akses mencatat kasbon.")
+            return
+
+        # --- Mode sekali-kirim ---
+        if body:
+            f = parse_loan_block(body)
+            name = f.get("name")
+            amount = parse_amount(f.get("amount_raw", ""))
+            if not name:
+                await update.message.reply_text(
+                    "Nama karyawan wajib diisi.\n\n" + KASBON_FORMAT_HINT
+                )
+                return
+            if amount is None:
+                await update.message.reply_text(
+                    "Jumlah tidak valid.\n\n" + KASBON_FORMAT_HINT
+                )
+                return
+            paid_code = resolve_payment_account(f.get("paid_raw", "")) or DEFAULT_PAID_CODE
+            msg = await _do_create_loan(db, u, name, amount, paid_code)
+            await clear_state(db, chat_id)
+            await update.message.reply_text(msg)
+            return
+
+        # --- Mode terpandu ---
+        await set_state(db, chat_id, "add_loan", "name", {})
+    await update.message.reply_text(
+        "Catat kasbon.\nNama karyawan:\n\n"
+        "(ketik /batal untuk membatalkan)\n\nAtau lain kali kirim sekaligus:\n"
+        + KASBON_FORMAT_HINT
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("bantuan", cmd_help))
@@ -719,4 +852,5 @@ def register(application) -> None:
     application.add_handler(CommandHandler("tambah_produk", cmd_tambah_produk))
     application.add_handler(CommandHandler("tambah_pengeluaran", cmd_tambah_pengeluaran))
     application.add_handler(CommandHandler("tambah_kontak", cmd_tambah_kontak))
+    application.add_handler(CommandHandler("kasbon", cmd_kasbon))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
