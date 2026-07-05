@@ -18,10 +18,48 @@ from ..core.database import SessionLocal
 from ..deps import user_roles
 from ..models import Role, TelegramLink, User, UserRole
 from ..services.product_service import create_product
+from ..services.expense_service import create_expense
+from ..services.journal import JournalNotBalanced
+from .parsing import (
+    DEFAULT_EXPENSE_CODE,
+    DEFAULT_PAID_CODE,
+    EXPENSE_ACCOUNTS,
+    PAYMENT_ACCOUNTS,
+    parse_amount,
+    parse_expense_block,
+    resolve_expense_account,
+    resolve_payment_account,
+)
 from .state import clear_state, load_state, set_state
 
 # Peran yang boleh menambah produk (owner selalu lolos).
 PRODUCT_ROLES = {"warehouse", "finance", "sales"}
+EXPENSE_ROLES = {"finance"}
+
+# Contoh format sekali-kirim untuk /tambah_pengeluaran.
+EXPENSE_FORMAT_HINT = (
+    "Format cepat (kirim sekaligus):\n"
+    "/tambah_pengeluaran\n"
+    "Jumlah: 150000\n"
+    "Untuk: Bensin operasional\n"
+    "Beban: bensin\n"
+    "Bayar: kas"
+)
+
+
+def _menu(title: str, items) -> str:
+    lines = [title]
+    for i, (_code, label) in enumerate(items, 1):
+        lines.append(f"{i}. {label}")
+    return "\n".join(lines)
+
+
+def _pick_index(text: str, n: int):
+    t = (text or "").strip()
+    if not t.isdigit():
+        return None
+    i = int(t)
+    return i - 1 if 1 <= i <= n else None
 
 # Contoh format sekali-kirim untuk /tambah_produk.
 PRODUCT_FORMAT_HINT = (
@@ -113,6 +151,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/link <kode> - tautkan akun Telegram ke Ananta\n"
         "/buat_kode <email> - (owner) buat kode tautan untuk pengguna\n"
         "/tambah_produk - tambah produk baru (terpandu atau sekali-kirim)\n"
+        "/tambah_pengeluaran - catat pengeluaran (terpandu atau sekali-kirim)\n"
         "/batal - batalkan input yang sedang berjalan\n"
         "/bantuan - tampilkan bantuan ini\n\n"
         + PRODUCT_FORMAT_HINT
@@ -420,6 +459,146 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
 
+        elif st.flow == "add_expense":
+            if st.step == "amount":
+                amount = parse_amount(text)
+                if amount is None:
+                    await update.message.reply_text(
+                        "Jumlah tidak valid. Masukkan angka, mis. 150000:"
+                    )
+                    return
+                draft["amount"] = str(amount)
+                await set_state(db, chat_id, "add_expense", "description", draft)
+                await update.message.reply_text("Untuk apa pengeluaran ini? (keterangan):")
+            elif st.step == "description":
+                draft["description"] = text[:255]
+                await set_state(db, chat_id, "add_expense", "account", draft)
+                await update.message.reply_text(
+                    _menu("Pilih kategori beban (ketik nomor):", EXPENSE_ACCOUNTS)
+                )
+            elif st.step == "account":
+                idx = _pick_index(text, len(EXPENSE_ACCOUNTS))
+                if idx is None:
+                    await update.message.reply_text("Ketik nomor yang valid dari daftar:")
+                    return
+                draft["exp_code"] = EXPENSE_ACCOUNTS[idx][0]
+                await set_state(db, chat_id, "add_expense", "paid", draft)
+                await update.message.reply_text(
+                    _menu("Dibayar dari mana? (ketik nomor):", PAYMENT_ACCOUNTS)
+                )
+            elif st.step == "paid":
+                idx = _pick_index(text, len(PAYMENT_ACCOUNTS))
+                if idx is None:
+                    await update.message.reply_text("Ketik nomor yang valid dari daftar:")
+                    return
+                draft["paid_code"] = PAYMENT_ACCOUNTS[idx][0]
+                await set_state(db, chat_id, "add_expense", "confirm", draft)
+                await update.message.reply_text(
+                    "Konfirmasi pengeluaran:\n"
+                    f"- Jumlah : Rp{draft['amount']}\n"
+                    f"- Untuk  : {draft['description']}\n"
+                    f"- Beban  : {draft['exp_code']}\n"
+                    f"- Bayar  : {draft['paid_code']}\n\n"
+                    "Ketik YA untuk simpan, atau /batal."
+                )
+            elif st.step == "confirm":
+                if text.lower() in ("ya", "y", "iya"):
+                    u = await _linked_user(db, chat_id)
+                    if u is None:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
+                        return
+                    msg = await _do_create_expense(
+                        db,
+                        u,
+                        Decimal(draft["amount"]),
+                        draft["description"],
+                        draft["exp_code"],
+                        draft["paid_code"],
+                    )
+                    await clear_state(db, chat_id)
+                    await update.message.reply_text(msg)
+                else:
+                    await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
+
+
+async def _do_create_expense(db, u, amount, description, exp_code, paid_code):
+    on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()  # tanggal WIB
+    try:
+        exp = await create_expense(
+            db,
+            company_id=u.company_id,
+            user_id=u.id,
+            on_date=on_date,
+            category="umum",
+            description=description,
+            amount=amount,
+            expense_account_code=exp_code,
+            paid_account_code=paid_code,
+            note=None,
+        )
+        await db.commit()
+    except (JournalNotBalanced, ValueError) as e:
+        await db.rollback()
+        return f"Gagal: {e}"
+    except Exception:
+        await db.rollback()
+        return "Gagal menyimpan pengeluaran (kesalahan tak terduga)."
+    await db.refresh(exp)
+    return (
+        f"Pengeluaran tersimpan: {exp.number}\n"
+        f"{description} - Rp{amount}\n"
+        f"Beban {exp_code}, dibayar dari {paid_code}.\n"
+        "Cek di web Ananta -> menu Biaya."
+    )
+
+
+async def cmd_tambah_pengeluaran(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    full_text = update.message.text or ""
+    parts = full_text.split(None, 1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+
+    async with SessionLocal() as db:
+        u = await _linked_user(db, chat_id)
+        if u is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, u.id)
+        if "owner" not in roles and not roles.intersection(EXPENSE_ROLES):
+            await update.message.reply_text("Kamu tidak punya akses menambah pengeluaran.")
+            return
+
+        # --- Mode sekali-kirim ---
+        if body:
+            f = parse_expense_block(body)
+            amount = parse_amount(f.get("amount_raw", ""))
+            if amount is None:
+                await update.message.reply_text(
+                    "Jumlah tidak valid.\n\n" + EXPENSE_FORMAT_HINT
+                )
+                return
+            desc = f.get("description")
+            if not desc:
+                await update.message.reply_text(
+                    "Keterangan (baris 'Untuk:') wajib diisi.\n\n" + EXPENSE_FORMAT_HINT
+                )
+                return
+            exp_code = resolve_expense_account(f.get("expense_raw", "")) or DEFAULT_EXPENSE_CODE
+            paid_code = resolve_payment_account(f.get("paid_raw", "")) or DEFAULT_PAID_CODE
+            msg = await _do_create_expense(db, u, amount, desc, exp_code, paid_code)
+            await clear_state(db, chat_id)
+            await update.message.reply_text(msg)
+            return
+
+        # --- Mode terpandu ---
+        await set_state(db, chat_id, "add_expense", "amount", {})
+    await update.message.reply_text(
+        "Tambah pengeluaran.\nMasukkan JUMLAH (angka, mis. 150000):\n\n"
+        "(ketik /batal kapan saja untuk membatalkan)\n\n"
+        "Atau lain kali kirim sekaligus:\n" + EXPENSE_FORMAT_HINT
+    )
+
 
 def register(application) -> None:
     application.add_handler(CommandHandler("start", cmd_start))
@@ -429,4 +608,5 @@ def register(application) -> None:
     application.add_handler(CommandHandler("buat_kode", cmd_buat_kode))
     application.add_handler(CommandHandler("batal", cmd_batal))
     application.add_handler(CommandHandler("tambah_produk", cmd_tambah_produk))
+    application.add_handler(CommandHandler("tambah_pengeluaran", cmd_tambah_pengeluaran))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
