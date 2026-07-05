@@ -119,3 +119,13 @@ Item: CLA-AZL x 5 @ 800000"""
     assert b["supplier"] == "PT Sumber Minuman"
     assert b["warehouse"] == "Gudang Utama"
     assert len(b["items"]) == 2
+
+
+def test_parse_penjualan_block():
+    from app.bot.parsing import parse_penjualan_block
+    blk = """Customer: Toko Berkah
+Item: MNS-WHK x 2 @ 300000
+Item: CLA-AZL x 1 @ 950000"""
+    b = parse_penjualan_block(blk)
+    assert b["customer"] == "Toko Berkah"
+    assert len(b["items"]) == 2

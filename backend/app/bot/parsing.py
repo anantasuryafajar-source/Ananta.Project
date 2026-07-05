@@ -255,3 +255,23 @@ def parse_pengadaan_block(block: str) -> dict:
         elif key in ("item", "barang", "produk"):
             out["items"].append(val)
     return out
+
+
+# ===================== PENJUALAN / Omzet Lempar (faktur jual multi-baris) =====================
+def parse_penjualan_block(block: str) -> dict:
+    """Parse blok penjualan. Sama seperti pengadaan tapi 'Customer' bukan 'Supplier'."""
+    out = {"customer": None, "warehouse": None, "items": []}
+    for raw in block.splitlines():
+        line = raw.strip().lstrip("-").strip()
+        if not line or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key in ("customer", "pelanggan", "outlet", "pembeli"):
+            out["customer"] = val[:160]
+        elif key in ("gudang", "warehouse"):
+            out["warehouse"] = val[:120]
+        elif key in ("item", "barang", "produk"):
+            out["items"].append(val)
+    return out
