@@ -13,6 +13,9 @@ class User(Base, PKMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     reset_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     reset_expires: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # --- kode tautan bot Telegram (langkah 2) ---
+    telegram_link_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    telegram_link_expires: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Role(Base, PKMixin):

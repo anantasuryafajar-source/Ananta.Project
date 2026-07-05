@@ -5,9 +5,11 @@ Identitas & RBAC memakai tabel/logika Ananta yang sudah ada — bot tidak punya
 hak istimewa sendiri.
 """
 import json
+import secrets
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -70,6 +72,16 @@ def parse_product_block(block: str) -> dict:
     return out
 
 
+def _code_valid(target) -> bool:
+    """True bila kode tautan user masih ada dan belum kedaluwarsa."""
+    exp = target.telegram_link_expires
+    if exp is None:
+        return False
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return exp > datetime.now(timezone.utc)
+
+
 async def _linked_user(db, chat_id: int) -> User | None:
     link = (
         await db.execute(
@@ -98,7 +110,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Perintah tersedia:\n"
-        "/link - tautkan akun Telegram ke Ananta\n"
+        "/link <kode> - tautkan akun Telegram ke Ananta\n"
+        "/buat_kode <email> - (owner) buat kode tautan untuk pengguna\n"
         "/tambah_produk - tambah produk baru (terpandu atau sekali-kirim)\n"
         "/batal - batalkan input yang sedang berjalan\n"
         "/bantuan - tampilkan bantuan ini\n\n"
@@ -108,12 +121,57 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
+    args = context.args or []
+    code = args[0].strip() if args else ""
+
     async with SessionLocal() as db:
         u = await _linked_user(db, chat_id)
         if u is not None:
             await update.message.reply_text(f"Akun ini sudah tertaut sebagai {u.email}.")
             return
 
+        # --- Mode kode: /link <kode> (untuk semua pengguna) ---
+        if code:
+            target = (
+                await db.execute(
+                    select(User).where(
+                        User.telegram_link_code == code,
+                        User.is_active.is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            if target is None or not _code_valid(target):
+                await update.message.reply_text(
+                    "Kode tidak valid atau sudah kedaluwarsa. Minta kode baru ke owner."
+                )
+                return
+            # tautkan chat ini ke user tsb (perbarui bila chat pernah tertaut)
+            existing = (
+                await db.execute(
+                    select(TelegramLink).where(
+                        TelegramLink.telegram_chat_id == chat_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                db.add(
+                    TelegramLink(
+                        telegram_chat_id=chat_id, user_id=target.id, is_active=True
+                    )
+                )
+            else:
+                existing.user_id = target.id
+                existing.is_active = True
+            # kode sekali-pakai: hapus setelah dipakai
+            target.telegram_link_code = None
+            target.telegram_link_expires = None
+            await db.commit()
+            await update.message.reply_text(
+                f"Berhasil tertaut sebagai {target.email}."
+            )
+            return
+
+        # --- Bootstrap owner via TELEGRAM_OWNER_CHAT_ID (tanpa kode) ---
         owner_chat = str(settings.TELEGRAM_OWNER_CHAT_ID or "").strip()
         if owner_chat and str(chat_id) == owner_chat:
             owner_user = (
@@ -140,10 +198,60 @@ async def cmd_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
         else:
             await update.message.reply_text(
-                "Penautan multi-pengguna belum aktif (dibangun di langkah berikutnya).\n"
-                "Untuk sekarang hanya owner yang bisa menaut lewat TELEGRAM_OWNER_CHAT_ID.\n\n"
+                "Untuk menautkan akun, minta KODE ke owner, lalu kirim:\n"
+                "/link <kode>\n\n"
                 f"Chat ID kamu: {chat_id}"
             )
+
+
+async def cmd_buat_kode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Owner membuat kode tautan sekali-pakai untuk seorang pengguna (by email)."""
+    chat_id = update.effective_chat.id
+    args = context.args or []
+    email = args[0].strip().lower() if args else ""
+
+    async with SessionLocal() as db:
+        owner = await _linked_user(db, chat_id)
+        if owner is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, owner.id)
+        if "owner" not in roles:
+            await update.message.reply_text("Hanya owner yang bisa membuat kode tautan.")
+            return
+        if not email:
+            await update.message.reply_text(
+                "Format: /buat_kode <email-pengguna>\n"
+                "Contoh: /buat_kode abay@anantaasf.com\n\n"
+                "Pengguna harus sudah punya akun di Ananta (menu pengelolaan pengguna)."
+            )
+            return
+
+        target = (
+            await db.execute(
+                select(User).where(
+                    func.lower(User.email) == email,
+                    User.company_id == owner.company_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if target is None:
+            await update.message.reply_text(
+                f"Belum ada pengguna dengan email {email}. Buat akunnya dulu di Ananta, "
+                "lalu jalankan perintah ini lagi."
+            )
+            return
+
+        new_code = secrets.token_urlsafe(6)
+        target.telegram_link_code = new_code
+        target.telegram_link_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+        await db.commit()
+        await update.message.reply_text(
+            f"Kode tautan untuk {target.email} (berlaku 24 jam):\n\n"
+            f"{new_code}\n\n"
+            "Kirim kode ini ke orangnya. Mereka membuka bot lalu mengetik:\n"
+            f"/link {new_code}"
+        )
 
 
 async def cmd_batal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -318,6 +426,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("bantuan", cmd_help))
     application.add_handler(CommandHandler("help", cmd_help))
     application.add_handler(CommandHandler("link", cmd_link))
+    application.add_handler(CommandHandler("buat_kode", cmd_buat_kode))
     application.add_handler(CommandHandler("batal", cmd_batal))
     application.add_handler(CommandHandler("tambah_produk", cmd_tambah_produk))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
