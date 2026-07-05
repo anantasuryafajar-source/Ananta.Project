@@ -88,3 +88,13 @@ Bayar: bca"""
     # tanpa bayar -> default kas
     f2 = parse_loan_block("Nama: Ani\nJumlah: 100000")
     assert (resolve_payment_account(f2.get("paid_raw", "")) or DEFAULT_PAID_CODE) == "1-1000"
+
+
+def test_parse_payment_block():
+    from app.bot.parsing import parse_payment_block, parse_amount
+    f = parse_payment_block("Faktur: BILL/2026/0001\nJumlah: 500.000")
+    assert f["ref"] == "BILL/2026/0001"
+    assert parse_amount(f["amount_raw"]) == Decimal("500000")
+    f2 = parse_payment_block("Nota: INV/2026/0009\nBayar: 250000")
+    assert f2["ref"] == "INV/2026/0009"
+    assert parse_amount(f2["amount_raw"]) == Decimal("250000")

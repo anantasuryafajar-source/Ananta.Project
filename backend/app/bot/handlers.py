@@ -16,11 +16,12 @@ from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters
 from ..core.config import settings
 from ..core.database import SessionLocal
 from ..deps import user_roles
-from ..models import Role, TelegramLink, User, UserRole
+from ..models import Role, TelegramLink, User, UserRole, Bill, Invoice
 from ..services.product_service import create_product
 from ..services.contact_service import create_contact
 from ..services.expense_service import create_expense
 from ..services.expense_service import create_loan
+from ..services.payment_service import pay_bill, receive_payment
 from ..services.journal import JournalNotBalanced
 from .parsing import (
     CONTACT_TYPES,
@@ -32,6 +33,7 @@ from .parsing import (
     parse_contact_block,
     parse_expense_block,
     parse_loan_block,
+    parse_payment_block,
     resolve_contact_type,
     resolve_expense_account,
     resolve_payment_account,
@@ -43,6 +45,14 @@ PRODUCT_ROLES = {"warehouse", "finance", "sales"}
 EXPENSE_ROLES = {"finance"}
 CONTACT_ROLES = {"sales", "finance"}
 KASBON_ROLES = {"finance"}
+PAYMENT_ROLES = {"finance"}
+
+PAY_SUPPLIER_HINT = (
+    "Format cepat:\n/bayar_supplier\nFaktur: BILL/2026/0001\nJumlah: 500000"
+)
+PAY_CUSTOMER_HINT = (
+    "Format cepat:\n/bayar_customer\nFaktur: INV/2026/0001\nJumlah: 500000"
+)
 
 KASBON_FORMAT_HINT = (
     "Format cepat (kirim sekaligus):\n"
@@ -178,6 +188,8 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/tambah_pengeluaran - catat pengeluaran (terpandu atau sekali-kirim)\n"
         "/tambah_kontak - tambah customer/supplier (terpandu atau sekali-kirim)\n"
         "/kasbon - catat kasbon karyawan (terpandu atau sekali-kirim)\n"
+        "/bayar_supplier - bayar faktur pembelian (by nomor)\n"
+        "/bayar_customer - terima pembayaran faktur penjualan (by nomor)\n"
         "/batal - batalkan input yang sedang berjalan\n"
         "/bantuan - tampilkan bantuan ini\n\n"
         + PRODUCT_FORMAT_HINT
@@ -638,6 +650,96 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
 
+        elif st.flow == "pay_supplier":
+            if st.step == "ref":
+                u0 = await _linked_user(db, chat_id)
+                bill = await _find_bill(db, u0.company_id, text.strip()) if u0 else None
+                if bill is None:
+                    await update.message.reply_text(
+                        "Faktur tidak ditemukan. Ketik ulang nomornya, atau /batal:"
+                    )
+                    return
+                draft["bill_id"] = bill.id
+                draft["bill_number"] = bill.number
+                sisa = _sisa(bill)
+                await set_state(db, chat_id, "pay_supplier", "amount", draft)
+                extra = f"Sisa tagihan: Rp{sisa}\n" if sisa is not None else ""
+                await update.message.reply_text(
+                    f"Faktur {bill.number} ditemukan.\n{extra}Masukkan jumlah bayar:"
+                )
+            elif st.step == "amount":
+                amount = parse_amount(text)
+                if amount is None:
+                    await update.message.reply_text("Jumlah tidak valid. Masukkan angka:")
+                    return
+                draft["amount"] = str(amount)
+                await set_state(db, chat_id, "pay_supplier", "confirm", draft)
+                await update.message.reply_text(
+                    "Konfirmasi pembayaran supplier:\n"
+                    f"- Faktur : {draft['bill_number']}\n"
+                    f"- Jumlah : Rp{draft['amount']} (dari Kas)\n\n"
+                    "Ketik YA untuk simpan, atau /batal."
+                )
+            elif st.step == "confirm":
+                if text.lower() in ("ya", "y", "iya"):
+                    u = await _linked_user(db, chat_id)
+                    if u is None:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
+                        return
+                    msg = await _do_pay_supplier(
+                        db, u, draft["bill_id"], draft["bill_number"], Decimal(draft["amount"])
+                    )
+                    await clear_state(db, chat_id)
+                    await update.message.reply_text(msg)
+                else:
+                    await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
+
+        elif st.flow == "pay_customer":
+            if st.step == "ref":
+                u0 = await _linked_user(db, chat_id)
+                inv = await _find_invoice(db, u0.company_id, text.strip()) if u0 else None
+                if inv is None:
+                    await update.message.reply_text(
+                        "Faktur tidak ditemukan. Ketik ulang nomornya, atau /batal:"
+                    )
+                    return
+                draft["invoice_id"] = inv.id
+                draft["invoice_number"] = inv.number
+                sisa = _sisa(inv)
+                await set_state(db, chat_id, "pay_customer", "amount", draft)
+                extra = f"Sisa tagihan: Rp{sisa}\n" if sisa is not None else ""
+                await update.message.reply_text(
+                    f"Faktur {inv.number} ditemukan.\n{extra}Masukkan jumlah diterima:"
+                )
+            elif st.step == "amount":
+                amount = parse_amount(text)
+                if amount is None:
+                    await update.message.reply_text("Jumlah tidak valid. Masukkan angka:")
+                    return
+                draft["amount"] = str(amount)
+                await set_state(db, chat_id, "pay_customer", "confirm", draft)
+                await update.message.reply_text(
+                    "Konfirmasi penerimaan customer:\n"
+                    f"- Faktur : {draft['invoice_number']}\n"
+                    f"- Jumlah : Rp{draft['amount']} (ke Kas)\n\n"
+                    "Ketik YA untuk simpan, atau /batal."
+                )
+            elif st.step == "confirm":
+                if text.lower() in ("ya", "y", "iya"):
+                    u = await _linked_user(db, chat_id)
+                    if u is None:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
+                        return
+                    msg = await _do_pay_customer(
+                        db, u, draft["invoice_id"], draft["invoice_number"], Decimal(draft["amount"])
+                    )
+                    await clear_state(db, chat_id)
+                    await update.message.reply_text(msg)
+                else:
+                    await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
+
 
 async def _do_create_expense(db, u, amount, description, exp_code, paid_code):
     on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()  # tanggal WIB
@@ -842,6 +944,157 @@ async def cmd_kasbon(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
 
+async def _find_bill(db, company_id, number):
+    return (
+        await db.execute(
+            select(Bill).where(Bill.company_id == company_id, Bill.number == number)
+        )
+    ).scalar_one_or_none()
+
+
+async def _find_invoice(db, company_id, number):
+    return (
+        await db.execute(
+            select(Invoice).where(
+                Invoice.company_id == company_id, Invoice.number == number
+            )
+        )
+    ).scalar_one_or_none()
+
+
+def _sisa(doc):
+    try:
+        return doc.total - doc.paid_total
+    except Exception:
+        return None
+
+
+async def _do_pay_supplier(db, u, bill_id, bill_number, amount):
+    on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()
+    try:
+        pm = await pay_bill(
+            db, company_id=u.company_id, user_id=u.id,
+            bill_id=bill_id, on_date=on_date, amount=amount, cash_account_id=None,
+        )
+        await db.commit()
+    except (JournalNotBalanced, ValueError) as e:
+        await db.rollback()
+        return f"Gagal: {e}"
+    except Exception:
+        await db.rollback()
+        return "Gagal menyimpan pembayaran (kesalahan tak terduga)."
+    await db.refresh(pm)
+    return (
+        f"Pembayaran supplier tersimpan: {pm.number}\n"
+        f"Faktur {bill_number} - Rp{amount} (dari Kas).\n"
+        "Cek di web Ananta -> menu Pembayaran."
+    )
+
+
+async def _do_pay_customer(db, u, invoice_id, invoice_number, amount):
+    on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()
+    try:
+        pr = await receive_payment(
+            db, company_id=u.company_id, user_id=u.id,
+            invoice_id=invoice_id, on_date=on_date, amount=amount, cash_account_id=None,
+        )
+        await db.commit()
+    except (JournalNotBalanced, ValueError) as e:
+        await db.rollback()
+        return f"Gagal: {e}"
+    except Exception:
+        await db.rollback()
+        return "Gagal menyimpan penerimaan (kesalahan tak terduga)."
+    await db.refresh(pr)
+    return (
+        f"Penerimaan customer tersimpan: {pr.number}\n"
+        f"Faktur {invoice_number} - Rp{amount} (ke Kas).\n"
+        "Cek di web Ananta -> menu Pembayaran."
+    )
+
+
+async def cmd_bayar_supplier(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    full_text = update.message.text or ""
+    parts = full_text.split(None, 1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+
+    async with SessionLocal() as db:
+        u = await _linked_user(db, chat_id)
+        if u is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, u.id)
+        if "owner" not in roles and not roles.intersection(PAYMENT_ROLES):
+            await update.message.reply_text("Kamu tidak punya akses mencatat pembayaran.")
+            return
+
+        if body:
+            f = parse_payment_block(body)
+            ref = f.get("ref")
+            amount = parse_amount(f.get("amount_raw", ""))
+            if not ref or amount is None:
+                await update.message.reply_text(
+                    "Faktur & Jumlah wajib.\n\n" + PAY_SUPPLIER_HINT
+                )
+                return
+            bill = await _find_bill(db, u.company_id, ref)
+            if bill is None:
+                await update.message.reply_text(f"Faktur pembelian {ref} tidak ditemukan.")
+                return
+            msg = await _do_pay_supplier(db, u, bill.id, bill.number, amount)
+            await clear_state(db, chat_id)
+            await update.message.reply_text(msg)
+            return
+
+        await set_state(db, chat_id, "pay_supplier", "ref", {})
+    await update.message.reply_text(
+        "Bayar supplier.\nMasukkan NOMOR faktur pembelian (mis. BILL/2026/0001):\n\n"
+        "(ketik /batal untuk membatalkan)\n\nAtau kirim sekaligus:\n" + PAY_SUPPLIER_HINT
+    )
+
+
+async def cmd_bayar_customer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    full_text = update.message.text or ""
+    parts = full_text.split(None, 1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+
+    async with SessionLocal() as db:
+        u = await _linked_user(db, chat_id)
+        if u is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, u.id)
+        if "owner" not in roles and not roles.intersection(PAYMENT_ROLES):
+            await update.message.reply_text("Kamu tidak punya akses mencatat penerimaan.")
+            return
+
+        if body:
+            f = parse_payment_block(body)
+            ref = f.get("ref")
+            amount = parse_amount(f.get("amount_raw", ""))
+            if not ref or amount is None:
+                await update.message.reply_text(
+                    "Faktur & Jumlah wajib.\n\n" + PAY_CUSTOMER_HINT
+                )
+                return
+            inv = await _find_invoice(db, u.company_id, ref)
+            if inv is None:
+                await update.message.reply_text(f"Faktur penjualan {ref} tidak ditemukan.")
+                return
+            msg = await _do_pay_customer(db, u, inv.id, inv.number, amount)
+            await clear_state(db, chat_id)
+            await update.message.reply_text(msg)
+            return
+
+        await set_state(db, chat_id, "pay_customer", "ref", {})
+    await update.message.reply_text(
+        "Terima pembayaran customer.\nMasukkan NOMOR faktur penjualan (mis. INV/2026/0001):\n\n"
+        "(ketik /batal untuk membatalkan)\n\nAtau kirim sekaligus:\n" + PAY_CUSTOMER_HINT
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("bantuan", cmd_help))
@@ -853,4 +1106,6 @@ def register(application) -> None:
     application.add_handler(CommandHandler("tambah_pengeluaran", cmd_tambah_pengeluaran))
     application.add_handler(CommandHandler("tambah_kontak", cmd_tambah_kontak))
     application.add_handler(CommandHandler("kasbon", cmd_kasbon))
+    application.add_handler(CommandHandler("bayar_supplier", cmd_bayar_supplier))
+    application.add_handler(CommandHandler("bayar_customer", cmd_bayar_customer))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))

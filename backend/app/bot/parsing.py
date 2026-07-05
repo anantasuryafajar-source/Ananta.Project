@@ -188,3 +188,21 @@ def parse_loan_block(block: str) -> dict:
         elif key in ("bayar", "sumber", "dari"):
             out["paid_raw"] = val
     return out
+
+
+# ===================== PEMBAYARAN (by nomor faktur) =====================
+def parse_payment_block(block: str) -> dict:
+    """Parse blok 'Kunci: Nilai' untuk pembayaran sekali-kirim."""
+    out: dict = {}
+    for raw in block.splitlines():
+        line = raw.strip().lstrip("-").strip()
+        if not line or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key in ("faktur", "nota", "invoice", "nomor", "no", "ref"):
+            out["ref"] = val[:40]
+        elif key in ("jumlah", "amount", "nominal", "bayar"):
+            out["amount_raw"] = val
+    return out
