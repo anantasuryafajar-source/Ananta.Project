@@ -116,3 +116,55 @@ def parse_expense_block(block: str) -> dict:
         elif key in ("bayar", "sumber", "dari"):
             out["paid_raw"] = val
     return out
+
+
+# ===================== KONTAK (customer/supplier) =====================
+# Untuk alur terpandu (nomor 1..N).
+CONTACT_TYPES = [
+    ("customer", "Customer / pelanggan"),
+    ("supplier", "Supplier / pemasok"),
+    ("both", "Keduanya"),
+]
+
+_CONTACT_TYPE_KEYWORDS = {
+    "customer": "customer",
+    "pelanggan": "customer",
+    "outlet": "customer",
+    "pembeli": "customer",
+    "supplier": "supplier",
+    "pemasok": "supplier",
+    "vendor": "supplier",
+    "both": "both",
+    "keduanya": "both",
+    "dua": "both",
+}
+
+
+def resolve_contact_type(value: str):
+    """Tipe kontak (customer/supplier/both) dari kata kunci. None bila tak dikenal."""
+    v = (value or "").strip().lower()
+    if v in ("customer", "supplier", "both"):
+        return v
+    for kw, code in _CONTACT_TYPE_KEYWORDS.items():
+        if kw in v:
+            return code
+    return None
+
+
+def parse_contact_block(block: str) -> dict:
+    """Parse blok 'Kunci: Nilai' untuk kontak sekali-kirim."""
+    out: dict = {}
+    for raw in block.splitlines():
+        line = raw.strip().lstrip("-").strip()
+        if not line or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key in ("tipe", "type", "jenis"):
+            out["type_raw"] = val
+        elif key in ("nama", "name"):
+            out["name"] = val[:160]
+        elif key in ("hp", "telp", "telpon", "telepon", "phone", "no", "nomor"):
+            out["phone"] = val[:40]
+    return out

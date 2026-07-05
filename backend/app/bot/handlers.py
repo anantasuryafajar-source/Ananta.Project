@@ -18,15 +18,19 @@ from ..core.database import SessionLocal
 from ..deps import user_roles
 from ..models import Role, TelegramLink, User, UserRole
 from ..services.product_service import create_product
+from ..services.contact_service import create_contact
 from ..services.expense_service import create_expense
 from ..services.journal import JournalNotBalanced
 from .parsing import (
+    CONTACT_TYPES,
     DEFAULT_EXPENSE_CODE,
     DEFAULT_PAID_CODE,
     EXPENSE_ACCOUNTS,
     PAYMENT_ACCOUNTS,
     parse_amount,
+    parse_contact_block,
     parse_expense_block,
+    resolve_contact_type,
     resolve_expense_account,
     resolve_payment_account,
 )
@@ -35,6 +39,15 @@ from .state import clear_state, load_state, set_state
 # Peran yang boleh menambah produk (owner selalu lolos).
 PRODUCT_ROLES = {"warehouse", "finance", "sales"}
 EXPENSE_ROLES = {"finance"}
+CONTACT_ROLES = {"sales", "finance"}
+
+CONTACT_FORMAT_HINT = (
+    "Format cepat (kirim sekaligus):\n"
+    "/tambah_kontak\n"
+    "Tipe: supplier\n"
+    "Nama: PT Sumber Minuman\n"
+    "HP: 081234567890"
+)
 
 # Contoh format sekali-kirim untuk /tambah_pengeluaran.
 EXPENSE_FORMAT_HINT = (
@@ -152,6 +165,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/buat_kode <email> - (owner) buat kode tautan untuk pengguna\n"
         "/tambah_produk - tambah produk baru (terpandu atau sekali-kirim)\n"
         "/tambah_pengeluaran - catat pengeluaran (terpandu atau sekali-kirim)\n"
+        "/tambah_kontak - tambah customer/supplier (terpandu atau sekali-kirim)\n"
         "/batal - batalkan input yang sedang berjalan\n"
         "/bantuan - tampilkan bantuan ini\n\n"
         + PRODUCT_FORMAT_HINT
@@ -521,6 +535,51 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
 
+        elif st.flow == "add_contact":
+            if st.step == "type":
+                idx = _pick_index(text, len(CONTACT_TYPES))
+                if idx is None:
+                    await update.message.reply_text("Ketik nomor yang valid dari daftar:")
+                    return
+                draft["type"] = CONTACT_TYPES[idx][0]
+                await set_state(db, chat_id, "add_contact", "name", draft)
+                await update.message.reply_text("Nama kontak:")
+            elif st.step == "name":
+                draft["name"] = text[:160]
+                await set_state(db, chat_id, "add_contact", "phone", draft)
+                await update.message.reply_text("Nomor HP (ketik - untuk kosong):")
+            elif st.step == "phone":
+                draft["phone"] = None if text == "-" else text[:40]
+                await set_state(db, chat_id, "add_contact", "confirm", draft)
+                await update.message.reply_text(
+                    "Konfirmasi kontak:\n"
+                    f"- Tipe : {draft['type']}\n"
+                    f"- Nama : {draft['name']}\n"
+                    f"- HP   : {draft.get('phone') or '-'}\n\n"
+                    "Ketik YA untuk simpan, atau /batal."
+                )
+            elif st.step == "confirm":
+                if text.lower() in ("ya", "y", "iya"):
+                    u = await _linked_user(db, chat_id)
+                    if u is None:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
+                        return
+                    contact = await create_contact(
+                        db,
+                        company_id=u.company_id,
+                        type=draft["type"],
+                        name=draft["name"],
+                        phone=draft.get("phone"),
+                    )
+                    await clear_state(db, chat_id)
+                    await update.message.reply_text(
+                        f"Kontak tersimpan: {contact.name} ({contact.type}).\n"
+                        "Cek di web Ananta -> menu Kontak."
+                    )
+                else:
+                    await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
+
 
 async def _do_create_expense(db, u, amount, description, exp_code, paid_code):
     on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()  # tanggal WIB
@@ -600,6 +659,56 @@ async def cmd_tambah_pengeluaran(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 
+async def cmd_tambah_kontak(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    full_text = update.message.text or ""
+    parts = full_text.split(None, 1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+
+    async with SessionLocal() as db:
+        u = await _linked_user(db, chat_id)
+        if u is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, u.id)
+        if "owner" not in roles and not roles.intersection(CONTACT_ROLES):
+            await update.message.reply_text("Kamu tidak punya akses menambah kontak.")
+            return
+
+        # --- Mode sekali-kirim ---
+        if body:
+            f = parse_contact_block(body)
+            name = f.get("name")
+            ctype = resolve_contact_type(f.get("type_raw", ""))
+            if not name:
+                await update.message.reply_text(
+                    "Nama wajib diisi.\n\n" + CONTACT_FORMAT_HINT
+                )
+                return
+            if ctype is None:
+                await update.message.reply_text(
+                    "Tipe wajib: customer / supplier / keduanya.\n\n" + CONTACT_FORMAT_HINT
+                )
+                return
+            contact = await create_contact(
+                db, company_id=u.company_id, type=ctype, name=name, phone=f.get("phone")
+            )
+            await clear_state(db, chat_id)
+            await update.message.reply_text(
+                f"Kontak tersimpan: {contact.name} ({contact.type}).\n"
+                "Cek di web Ananta -> menu Kontak."
+            )
+            return
+
+        # --- Mode terpandu ---
+        await set_state(db, chat_id, "add_contact", "type", {})
+    await update.message.reply_text(
+        _menu("Tambah kontak. Pilih tipe (ketik nomor):", CONTACT_TYPES)
+        + "\n\n(ketik /batal untuk membatalkan)\n\nAtau lain kali kirim sekaligus:\n"
+        + CONTACT_FORMAT_HINT
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("bantuan", cmd_help))
@@ -609,4 +718,5 @@ def register(application) -> None:
     application.add_handler(CommandHandler("batal", cmd_batal))
     application.add_handler(CommandHandler("tambah_produk", cmd_tambah_produk))
     application.add_handler(CommandHandler("tambah_pengeluaran", cmd_tambah_pengeluaran))
+    application.add_handler(CommandHandler("tambah_kontak", cmd_tambah_kontak))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))

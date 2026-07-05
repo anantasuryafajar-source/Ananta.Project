@@ -53,3 +53,24 @@ def test_parse_expense_block_defaults():
     assert f["description"] == "Parkir"
     assert (resolve_expense_account(f.get("expense_raw", "")) or DEFAULT_EXPENSE_CODE) == "6-2900"
     assert (resolve_payment_account(f.get("paid_raw", "")) or DEFAULT_PAID_CODE) == "1-1000"
+
+
+def test_resolve_contact_type():
+    from app.bot.parsing import resolve_contact_type
+    assert resolve_contact_type("supplier") == "supplier"
+    assert resolve_contact_type("Pemasok utama") == "supplier"
+    assert resolve_contact_type("customer") == "customer"
+    assert resolve_contact_type("pelanggan") == "customer"
+    assert resolve_contact_type("keduanya") == "both"
+    assert resolve_contact_type("entah") is None
+
+
+def test_parse_contact_block():
+    from app.bot.parsing import parse_contact_block, resolve_contact_type
+    block = """Tipe: supplier
+Nama: PT Sumber Minuman
+HP: 081234567890"""
+    f = parse_contact_block(block)
+    assert f["name"] == "PT Sumber Minuman"
+    assert resolve_contact_type(f["type_raw"]) == "supplier"
+    assert f["phone"] == "081234567890"
