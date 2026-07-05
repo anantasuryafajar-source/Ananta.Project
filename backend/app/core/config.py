@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_SECRET: str = ""
     # URL publik backend ini di Railway, mis. https://ananta-api-production-e77c.up.railway.app
     BACKEND_PUBLIC_URL: str = ""
+
+    # --- Asisten AI web ---
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-sonnet-5"
     # Chat ID Telegram owner untuk bootstrap penautan pertama (sementara).
     TELEGRAM_OWNER_CHAT_ID: str = ""
 

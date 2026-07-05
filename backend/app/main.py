@@ -12,6 +12,7 @@ from .routers import (
     investors, expenses,
     # --- Bot Telegram (langkah 1) ---
     telegram as telegram_router,
+    ai_chat,
 )
 import logging
 from .bot.application import startup_bot, shutdown_bot
@@ -75,6 +76,7 @@ app.include_router(reconcile.router, prefix=API)
 
 # Bot Telegram: webhook di-mount TANPA prefix /api/v1 (Telegram POST ke URL bersih).
 app.include_router(telegram_router.router)
+app.include_router(ai_chat.router, prefix=API)
 
 
 @app.get("/health", tags=["meta"])
