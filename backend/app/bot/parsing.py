@@ -5,6 +5,7 @@ Dipisah agar bisa diuji langsung di CI.
 import re
 from decimal import Decimal, InvalidOperation
 
+DEC0 = Decimal("0")
 CODE_RE = re.compile(r"^\d-\d{4}$")
 
 # Daftar akun beban umum yang ditawarkan di alur terpandu (nomor 1..N).
@@ -205,4 +206,52 @@ def parse_payment_block(block: str) -> dict:
             out["ref"] = val[:40]
         elif key in ("jumlah", "amount", "nominal", "bayar"):
             out["amount_raw"] = val
+    return out
+
+
+# ===================== PENGADAAN (faktur pembelian multi-baris) =====================
+_ITEM_RE = re.compile(r"^\s*(.+?)\s*[xX*]\s*([\d.,]+)\s*@\s*([\d.,]+)\s*$")
+
+
+def parse_price_nonneg(text: str):
+    """Harga >= 0 (unit_cost boleh 0). None bila tak valid."""
+    cleaned = (text or "").replace(".", "").replace(",", "").replace(" ", "").strip()
+    if cleaned == "":
+        return DEC0
+    try:
+        val = Decimal(cleaned)
+    except (InvalidOperation, ValueError):
+        return None
+    return val if val >= 0 else None
+
+
+def parse_item_line(line: str):
+    """'SKU x QTY @ HARGA' -> (sku, qty>0, harga>=0) atau None."""
+    m = _ITEM_RE.match(line or "")
+    if not m:
+        return None
+    sku = m.group(1).strip()[:40]
+    qty = parse_amount(m.group(2))          # > 0
+    price = parse_price_nonneg(m.group(3))  # >= 0
+    if not sku or qty is None or price is None:
+        return None
+    return (sku, qty, price)
+
+
+def parse_pengadaan_block(block: str) -> dict:
+    """Parse blok pengadaan. Baris 'Item:' bisa banyak."""
+    out = {"supplier": None, "warehouse": None, "items": []}
+    for raw in block.splitlines():
+        line = raw.strip().lstrip("-").strip()
+        if not line or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key in ("supplier", "pemasok", "vendor"):
+            out["supplier"] = val[:160]
+        elif key in ("gudang", "warehouse"):
+            out["warehouse"] = val[:120]
+        elif key in ("item", "barang", "produk"):
+            out["items"].append(val)
     return out

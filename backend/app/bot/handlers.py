@@ -16,12 +16,13 @@ from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters
 from ..core.config import settings
 from ..core.database import SessionLocal
 from ..deps import user_roles
-from ..models import Role, TelegramLink, User, UserRole, Bill, Invoice
+from ..models import Role, TelegramLink, User, UserRole, Bill, Invoice, Contact, Product, Warehouse
 from ..services.product_service import create_product
 from ..services.contact_service import create_contact
 from ..services.expense_service import create_expense
 from ..services.expense_service import create_loan
 from ..services.payment_service import pay_bill, receive_payment
+from ..services.purchase_service import create_and_post_bill
 from ..services.journal import JournalNotBalanced
 from .parsing import (
     CONTACT_TYPES,
@@ -32,8 +33,10 @@ from .parsing import (
     parse_amount,
     parse_contact_block,
     parse_expense_block,
+    parse_item_line,
     parse_loan_block,
     parse_payment_block,
+    parse_pengadaan_block,
     resolve_contact_type,
     resolve_expense_account,
     resolve_payment_account,
@@ -46,6 +49,16 @@ EXPENSE_ROLES = {"finance"}
 CONTACT_ROLES = {"sales", "finance"}
 KASBON_ROLES = {"finance"}
 PAYMENT_ROLES = {"finance"}
+PENGADAAN_ROLES = {"warehouse", "finance"}
+
+PENGADAAN_HINT = (
+    "Format:\n/pengadaan\n"
+    "Supplier: PT Sumber Minuman\n"
+    "Gudang: Gudang Utama   (opsional)\n"
+    "Item: MNS-WHK x 10 @ 250000\n"
+    "Item: CLA-AZL x 5 @ 800000\n\n"
+    "Tiap Item: SKU x jumlah @ harga_beli. Boleh banyak baris Item."
+)
 
 PAY_SUPPLIER_HINT = (
     "Format cepat:\n/bayar_supplier\nFaktur: BILL/2026/0001\nJumlah: 500000"
@@ -190,6 +203,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/kasbon - catat kasbon karyawan (terpandu atau sekali-kirim)\n"
         "/bayar_supplier - bayar faktur pembelian (by nomor)\n"
         "/bayar_customer - terima pembayaran faktur penjualan (by nomor)\n"
+        "/pengadaan - faktur pembelian dari supplier (SKU x qty @ harga)\n"
         "/batal - batalkan input yang sedang berjalan\n"
         "/bantuan - tampilkan bantuan ini\n\n"
         + PRODUCT_FORMAT_HINT
@@ -740,6 +754,57 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
 
+        elif st.flow == "pengadaan":
+            if st.step == "confirm":
+                if text.lower() in ("ya", "y", "iya"):
+                    u = await _linked_user(db, chat_id)
+                    if u is None:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
+                        return
+                    on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()
+                    lines_in = [
+                        {
+                            "product_id": ln["product_id"],
+                            "quantity": Decimal(ln["quantity"]),
+                            "unit_cost": Decimal(ln["unit_cost"]),
+                        }
+                        for ln in draft["lines"]
+                    ]
+                    try:
+                        bill = await create_and_post_bill(
+                            db,
+                            company_id=u.company_id,
+                            user_id=u.id,
+                            contact_id=draft["contact_id"],
+                            on_date=on_date,
+                            warehouse_id=draft.get("warehouse_id"),
+                            lines_in=lines_in,
+                            notes=None,
+                        )
+                        await db.commit()
+                    except (JournalNotBalanced, ValueError) as e:
+                        await db.rollback()
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text(f"Gagal: {e}")
+                        return
+                    except Exception:
+                        await db.rollback()
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text(
+                            "Gagal menyimpan pengadaan (kesalahan tak terduga)."
+                        )
+                        return
+                    await db.refresh(bill)
+                    await clear_state(db, chat_id)
+                    await update.message.reply_text(
+                        f"Pengadaan tersimpan: {bill.number}\n"
+                        f"Supplier: {draft['supplier_name']}\n"
+                        "Cek di web Ananta -> menu Pembelian."
+                    )
+                else:
+                    await update.message.reply_text("Ketik YA untuk simpan, atau /batal.")
+
 
 async def _do_create_expense(db, u, amount, description, exp_code, paid_code):
     on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()  # tanggal WIB
@@ -1095,6 +1160,130 @@ async def cmd_bayar_customer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 
+async def _find_supplier(db, company_id, name):
+    q = name.strip().lower()
+    rows = (
+        await db.execute(
+            select(Contact).where(
+                Contact.company_id == company_id,
+                Contact.type.in_(["supplier", "both"]),
+            )
+        )
+    ).scalars().all()
+    exact = [c for c in rows if (c.name or "").lower() == q]
+    if len(exact) == 1:
+        return exact[0], None
+    contains = [c for c in rows if q in (c.name or "").lower()]
+    if len(contains) == 1:
+        return contains[0], None
+    if not contains:
+        return None, f"Supplier '{name}' tidak ditemukan. Tambah via /tambah_kontak."
+    names = ", ".join(c.name for c in contains[:5])
+    return None, f"Beberapa supplier cocok: {names}. Sebutkan lebih tepat."
+
+
+async def _find_product_by_sku(db, company_id, sku):
+    return (
+        await db.execute(
+            select(Product).where(
+                Product.company_id == company_id,
+                func.upper(Product.sku) == sku.upper(),
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def _resolve_warehouse_id(db, company_id, name):
+    rows = (
+        await db.execute(select(Warehouse).where(Warehouse.company_id == company_id))
+    ).scalars().all()
+    if name:
+        q = name.strip().lower()
+        m = [w for w in rows if q in (w.name or "").lower()]
+        if len(m) == 1:
+            return m[0].id
+        return None  # ambigu/none -> tak ditetapkan
+    if len(rows) == 1:
+        return rows[0].id
+    return None
+
+
+async def cmd_pengadaan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    full_text = update.message.text or ""
+    parts = full_text.split(None, 1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+
+    async with SessionLocal() as db:
+        u = await _linked_user(db, chat_id)
+        if u is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, u.id)
+        if "owner" not in roles and not roles.intersection(PENGADAAN_ROLES):
+            await update.message.reply_text("Kamu tidak punya akses membuat pengadaan.")
+            return
+
+        if not body:
+            await update.message.reply_text("Buat faktur pembelian.\n\n" + PENGADAAN_HINT)
+            return
+
+        parsed = parse_pengadaan_block(body)
+        if not parsed["supplier"] or not parsed["items"]:
+            await update.message.reply_text(
+                "Supplier dan minimal satu Item wajib.\n\n" + PENGADAAN_HINT
+            )
+            return
+
+        supplier, err = await _find_supplier(db, u.company_id, parsed["supplier"])
+        if err:
+            await update.message.reply_text(err)
+            return
+
+        wh_id = await _resolve_warehouse_id(db, u.company_id, parsed["warehouse"])
+
+        lines = []
+        errors = []
+        total = Decimal("0")
+        summary_lines = []
+        for i, raw in enumerate(parsed["items"], 1):
+            item = parse_item_line(raw)
+            if item is None:
+                errors.append(f"Baris {i} salah format: '{raw}'")
+                continue
+            sku, qty, price = item
+            prod = await _find_product_by_sku(db, u.company_id, sku)
+            if prod is None:
+                errors.append(f"SKU '{sku}' tidak ditemukan (baris {i})")
+                continue
+            subtotal = qty * price
+            total += subtotal
+            lines.append(
+                {"product_id": prod.id, "quantity": str(qty), "unit_cost": str(price)}
+            )
+            summary_lines.append(f"- {prod.name} ({sku}) x {qty} @ {price} = {subtotal}")
+
+        if errors:
+            await update.message.reply_text(
+                "Tidak jadi disimpan. Perbaiki dulu:\n" + "\n".join(errors)
+            )
+            return
+
+        draft = {
+            "contact_id": supplier.id,
+            "supplier_name": supplier.name,
+            "warehouse_id": wh_id,
+            "lines": lines,
+        }
+        await set_state(db, chat_id, "pengadaan", "confirm", draft)
+    await update.message.reply_text(
+        "Konfirmasi pengadaan:\n"
+        f"Supplier: {supplier.name}\n"
+        + "\n".join(summary_lines)
+        + f"\n\nTotal: Rp{total}\n\nKetik YA untuk simpan, atau /batal."
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("bantuan", cmd_help))
@@ -1108,4 +1297,5 @@ def register(application) -> None:
     application.add_handler(CommandHandler("kasbon", cmd_kasbon))
     application.add_handler(CommandHandler("bayar_supplier", cmd_bayar_supplier))
     application.add_handler(CommandHandler("bayar_customer", cmd_bayar_customer))
+    application.add_handler(CommandHandler("pengadaan", cmd_pengadaan))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))

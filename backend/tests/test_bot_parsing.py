@@ -98,3 +98,24 @@ def test_parse_payment_block():
     f2 = parse_payment_block("Nota: INV/2026/0009\nBayar: 250000")
     assert f2["ref"] == "INV/2026/0009"
     assert parse_amount(f2["amount_raw"]) == Decimal("250000")
+
+
+def test_parse_item_line():
+    from app.bot.parsing import parse_item_line
+    assert parse_item_line("MNS-WHK x 10 @ 250000") == ("MNS-WHK", Decimal("10"), Decimal("250000"))
+    assert parse_item_line("CLA-AZL x 5 @ 800.000") == ("CLA-AZL", Decimal("5"), Decimal("800000"))
+    assert parse_item_line("BOXES x 3 @ 0") == ("BOXES", Decimal("3"), Decimal("0"))  # X dalam SKU aman
+    assert parse_item_line("ngawur") is None
+    assert parse_item_line("SKU x 0 @ 100") is None  # qty harus > 0
+
+
+def test_parse_pengadaan_block():
+    from app.bot.parsing import parse_pengadaan_block
+    blk = """Supplier: PT Sumber Minuman
+Gudang: Gudang Utama
+Item: MNS-WHK x 10 @ 250000
+Item: CLA-AZL x 5 @ 800000"""
+    b = parse_pengadaan_block(blk)
+    assert b["supplier"] == "PT Sumber Minuman"
+    assert b["warehouse"] == "Gudang Utama"
+    assert len(b["items"]) == 2
