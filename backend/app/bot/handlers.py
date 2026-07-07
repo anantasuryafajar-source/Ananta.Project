@@ -6,7 +6,7 @@ hak istimewa sendiri.
 """
 import json
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import func, select
@@ -16,6 +16,7 @@ from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters
 from ..core.config import settings
 from ..core.database import SessionLocal
 from ..deps import user_roles
+from ..services import reports_ext
 from ..models import Role, TelegramLink, User, UserRole, Bill, Invoice, Contact, Product, Warehouse
 from ..services.product_service import create_product
 from ..services.contact_service import create_contact
@@ -52,6 +53,20 @@ CONTACT_ROLES = {"sales", "finance"}
 KASBON_ROLES = {"finance"}
 PAYMENT_ROLES = {"finance"}
 PENGADAAN_ROLES = {"warehouse", "finance"}
+REPORT_ROLES = {"finance", "viewer"}
+
+
+def _rp(v) -> str:
+    """Format angka jadi 'Rp1.234.567'."""
+    try:
+        n = int(Decimal(str(v)))
+    except (InvalidOperation, ValueError, TypeError):
+        return f"Rp{v}"
+    return "Rp" + f"{n:,}".replace(",", ".")
+
+
+def _wib_today() -> date:
+    return (datetime.now(timezone.utc) + timedelta(hours=7)).date()
 JUAL_ROLES = {"sales", "finance"}
 
 JUAL_HINT = (
@@ -217,6 +232,8 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/bayar_customer - terima pembayaran faktur penjualan (by nomor)\n"
         "/pengadaan - faktur pembelian dari supplier (SKU x qty @ harga)\n"
         "/jual - faktur penjualan / Omzet Lempar (SKU x qty @ harga)\n"
+        "/report - ringkasan likuiditas (arus kas, burn rate, runway)\n"
+        "/omzet - Omzet Lempar vs Collect bulan ini\n"
         "/batal - batalkan input yang sedang berjalan\n"
         "/bantuan - tampilkan bantuan ini\n\n"
         + PRODUCT_FORMAT_HINT
@@ -1449,6 +1466,85 @@ async def cmd_jual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def cmd_omzet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    async with SessionLocal() as db:
+        u = await _linked_user(db, chat_id)
+        if u is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, u.id)
+        if "owner" not in roles and not roles.intersection(REPORT_ROLES):
+            await update.message.reply_text("Kamu tidak punya akses laporan.")
+            return
+        today = _wib_today()
+        start = today.replace(day=1)
+        data = await reports_ext.sales_kpi(db, u.company_id, start=start, end=today)
+
+    items = data.get("items", [])
+    lempar = sum((Decimal(i["omzet"]) for i in items), Decimal("0"))
+    collect = sum((Decimal(i["paid"]) for i in items), Decimal("0"))
+    pct = (collect / lempar * 100) if lempar > 0 else Decimal("0")
+    belum = lempar - collect
+    await update.message.reply_text(
+        f"Omzet {start.strftime('%d %b')} - {today.strftime('%d %b %Y')}\n\n"
+        f"Lempar (faktur terbit) : {_rp(lempar)}\n"
+        f"Collect (terbayar)     : {_rp(collect)}\n"
+        f"Rasio collect          : {pct:.0f}%\n"
+        f"Belum tertagih         : {_rp(belum)}\n\n"
+        "Lempar = nilai faktur penjualan bulan ini. Collect = yang sudah dibayar."
+    )
+
+
+async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    async with SessionLocal() as db:
+        u = await _linked_user(db, chat_id)
+        if u is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, u.id)
+        if "owner" not in roles and not roles.intersection(REPORT_ROLES):
+            await update.message.reply_text("Kamu tidak punya akses laporan.")
+            return
+        today = _wib_today()
+        cf = await reports_ext.cashflow(
+            db, u.company_id, start=today - timedelta(days=90), end=today
+        )
+        cf_all = await reports_ext.cashflow(
+            db, u.company_id, start=date(2000, 1, 1), end=today
+        )
+
+    tin = Decimal(cf["total_in"])
+    tout = Decimal(cf["total_out"])
+    net = Decimal(cf["net"])
+    cash_now = Decimal(cf_all["net"])
+    n_months = max(1, len({m["month"] for m in cf.get("months", [])}))
+    avg_net = net / n_months
+
+    lines = [
+        "Laporan Likuiditas (90 hari terakhir)",
+        "",
+        f"Kas masuk         : {_rp(tin)}",
+        f"Kas keluar        : {_rp(tout)}",
+        f"Arus kas bersih   : {_rp(net)}",
+        f"Saldo kas & bank  : {_rp(cash_now)}",
+    ]
+    if avg_net >= 0:
+        lines.append("Burn rate         : - (arus kas positif)")
+    else:
+        burn = -avg_net
+        lines.append(f"Burn rate/bulan   : {_rp(burn)}")
+        if cash_now > 0 and burn > 0:
+            runway = cash_now / burn
+            lines.append(f"Cash runway       : ~{runway:.1f} bulan")
+        else:
+            lines.append("Cash runway       : tak dapat dihitung (saldo kas belum tercatat)")
+    lines.append("")
+    lines.append("(Akurat bila saldo awal & jurnal Kas/Bank sudah terisi.)")
+    await update.message.reply_text("\n".join(lines))
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("bantuan", cmd_help))
@@ -1464,4 +1560,6 @@ def register(application) -> None:
     application.add_handler(CommandHandler("bayar_customer", cmd_bayar_customer))
     application.add_handler(CommandHandler("pengadaan", cmd_pengadaan))
     application.add_handler(CommandHandler("jual", cmd_jual))
+    application.add_handler(CommandHandler("report", cmd_report))
+    application.add_handler(CommandHandler("omzet", cmd_omzet))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
