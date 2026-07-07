@@ -19,6 +19,7 @@ dependencies = [
   "python-multipart>=0.0.20",
   "httpx>=0.28",
   "python-telegram-bot>=21,<22",
+  "apscheduler>=3.10,<4",
 ]
 
 [dependency-groups]

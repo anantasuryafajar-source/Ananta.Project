@@ -234,6 +234,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/jual - faktur penjualan / Omzet Lempar (SKU x qty @ harga)\n"
         "/report - ringkasan likuiditas (arus kas, burn rate, runway)\n"
         "/omzet - Omzet Lempar vs Collect bulan ini\n"
+        "/insight_test - (owner) kirim snapshot harian sekarang\n"
         "/batal - batalkan input yang sedang berjalan\n"
         "/bantuan - tampilkan bantuan ini\n\n"
         + PRODUCT_FORMAT_HINT
@@ -1545,6 +1546,28 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text("\n".join(lines))
 
 
+async def cmd_insight_test(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Uji insight: kirim snapshot harian SEGERA ke chat ini (owner-only)."""
+    chat_id = update.effective_chat.id
+    async with SessionLocal() as db:
+        u = await _linked_user(db, chat_id)
+        if u is None:
+            await update.message.reply_text("Akun belum tertaut. Ketik /link dulu.")
+            return
+        roles = await user_roles(db, u.id)
+        if "owner" not in roles:
+            await update.message.reply_text("Hanya owner yang bisa menguji insight.")
+            return
+        company_id = u.company_id
+    await update.message.reply_text("Membuat snapshot uji…")
+    from .insights import send_test_snapshot
+
+    try:
+        await send_test_snapshot(chat_id, company_id)
+    except Exception:
+        await update.message.reply_text("Gagal membuat snapshot (cek log).")
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("bantuan", cmd_help))
@@ -1562,4 +1585,5 @@ def register(application) -> None:
     application.add_handler(CommandHandler("jual", cmd_jual))
     application.add_handler(CommandHandler("report", cmd_report))
     application.add_handler(CommandHandler("omzet", cmd_omzet))
+    application.add_handler(CommandHandler("insight_test", cmd_insight_test))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))

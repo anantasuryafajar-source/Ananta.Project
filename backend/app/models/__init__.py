@@ -20,6 +20,7 @@ from .investor import Investor, InvestorPayout
 from .expense import Expense, EmployeeLoan
 # --- Bot Telegram (langkah 1) ---
 from .telegram import TelegramLink, TelegramSession
+from .scheduler import SchedulerRun
 from .ai_chat import AiConversation, AiMessage
 
 __all__ = [
@@ -33,5 +34,6 @@ __all__ = [
     "Investor", "InvestorPayout",
     "Expense", "EmployeeLoan",
     "TelegramLink", "TelegramSession",
+    "SchedulerRun",
     "AiConversation", "AiMessage",
 ]

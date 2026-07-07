@@ -28,9 +28,19 @@ async def lifespan(app: FastAPI):
         await startup_bot()
     except Exception as e:  # pragma: no cover
         _bot_log.warning("Bot Telegram gagal start; API tetap jalan: %s", e)
+    try:
+        from .bot.insights import start_scheduler
+        start_scheduler()
+    except Exception as e:  # pragma: no cover
+        _bot_log.warning("Scheduler insight gagal start; API tetap jalan: %s", e)
     yield
     try:
         await shutdown_bot()
+    except Exception:  # pragma: no cover
+        pass
+    try:
+        from .bot.insights import stop_scheduler
+        stop_scheduler()
     except Exception:  # pragma: no cover
         pass
 
