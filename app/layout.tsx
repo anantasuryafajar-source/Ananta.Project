@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Hanken_Grotesk, Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { PWARegister } from "@/components/pwa-register";
 
 const hanken = Hanken_Grotesk({ subsets: ["latin"], variable: "--font-hanken" });
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -12,11 +13,19 @@ export const metadata: Metadata = {
     template: "%s · Ananta",
   },
   description: "Sistem manajemen bisnis, akuntansi, dan distribusi PT ASF.",
+  applicationName: "Ananta",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Ananta",
+  },
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
     ],
-    apple: [{ url: "/icon.svg" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
   },
   other: {
     "facebook-domain-verification": "7pvgqfj2w2nqrwipm2thoquj7jzozu",
@@ -35,7 +44,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="id"
       className={`${hanken.variable} ${inter.variable} ${geistMono.variable}`}
     >
-      <body className="bg-canvas text-ink antialiased">{children}</body>
+      <body className="bg-canvas text-ink antialiased">
+        <PWARegister />
+        {children}
+      </body>
     </html>
   );
 }
