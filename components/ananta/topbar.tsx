@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, LogOut } from "lucide-react";
+import { KeyRound, LogOut, Menu } from "lucide-react";
 import { api, setToken } from "@/lib/api";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,13 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Field } from "@/components/ui/form";
 import { CommandPalette } from "@/components/ananta/command-palette";
+import { useMobileNav } from "@/components/ananta/nav-context";
 
 type Me = { full_name?: string; email?: string };
 
 export function Topbar({ title }: { title: string }) {
   const router = useRouter();
+  const { setOpen: setNavOpen } = useMobileNav();     // drawer sidebar (mobile)
   const [open, setOpen] = useState(false);           // dropdown
   const [openPw, setOpenPw] = useState(false);       // modal ganti sandi
   const [me, setMe] = useState<Me | null>(null);
@@ -62,8 +64,18 @@ export function Topbar({ title }: { title: string }) {
   }
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-line bg-surface px-6">
-      <h1 className="text-h3 font-semibold text-ink">{title}</h1>
+    <header className="flex h-14 items-center justify-between border-b border-line bg-surface px-4 md:px-6">
+      <div className="flex min-w-0 items-center gap-2">
+        {/* Tombol menu — hanya mobile */}
+        <button
+          onClick={() => setNavOpen(true)}
+          className="-ml-1 rounded-[var(--radius-button)] p-1.5 text-ink-muted hover:bg-surface-sunken md:hidden"
+          aria-label="Buka menu"
+        >
+          <Menu size={20} />
+        </button>
+        <h1 className="truncate text-h3 font-semibold text-ink">{title}</h1>
+      </div>
       <div className="flex items-center gap-3">
         <CommandPalette />
 

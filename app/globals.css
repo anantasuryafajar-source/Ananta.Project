@@ -185,3 +185,18 @@
     );
   }
 }
+
+/* ---------- Mobile: tabel bisa digeser horizontal ----------
+   Di layar sempit tabel keuangan (6+ kolom) lebih lebar dari layar.
+   Jadikan setiap tabel di area konten sebagai kotak yang bisa di-scroll
+   sendiri, alih-alih memaksa seluruh halaman geser. */
+@media (max-width: 767px) {
+  .app-main table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+}
