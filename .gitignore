@@ -4,6 +4,8 @@ out/
 .env
 .env*.local
 .DS_Store
+# artefak build TypeScript
+*.tsbuildinfo
 # backend
 backend/__pycache__/
 backend/**/__pycache__/
