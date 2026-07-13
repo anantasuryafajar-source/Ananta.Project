@@ -26,6 +26,7 @@ class ChatIn(BaseModel):
     message: str
     model: str | None = None
     effort: str | None = None
+    attachments: list[dict] | None = None  # [{kind:"document"|"image", media_type, data(base64)}]
 
 
 async def _owned_conv(db: AsyncSession, conv_id: str, user: User) -> AiConversation:
@@ -113,6 +114,31 @@ async def chat(
     if not text:
         raise HTTPException(status_code=400, detail="Pesan kosong.")
 
+    # Bangun blok lampiran (PDF/gambar) untuk dikirim ke AI. Batas ~10MB base64.
+    att_blocks = []
+    note = ""
+    if body.attachments:
+        MAX = 10 * 1024 * 1024
+        total = sum(len(a.get("data") or "") for a in body.attachments)
+        if total > MAX:
+            raise HTTPException(status_code=413, detail="Lampiran terlalu besar (maks ~7MB).")
+        for a in body.attachments[:5]:
+            kind = a.get("kind")
+            data = a.get("data")
+            media = a.get("media_type")
+            if not data or not media:
+                continue
+            if kind == "image":
+                att_blocks.append(
+                    {"type": "image", "source": {"type": "base64", "media_type": media, "data": data}}
+                )
+            else:  # document (PDF dll)
+                att_blocks.append(
+                    {"type": "document", "source": {"type": "base64", "media_type": media, "data": data}}
+                )
+        if att_blocks:
+            note = f" [dengan {len(att_blocks)} lampiran]"
+
     # Ambil / buat percakapan
     if body.conversation_id:
         conv = await _owned_conv(db, body.conversation_id, user)
@@ -125,8 +151,8 @@ async def chat(
         db.add(conv)
         await db.flush()
 
-    # Simpan pesan pengguna
-    db.add(AiMessage(conversation_id=conv.id, role="user", content=text))
+    # Simpan pesan pengguna (dengan penanda lampiran bila ada)
+    db.add(AiMessage(conversation_id=conv.id, role="user", content=text + note))
     conv.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
@@ -141,7 +167,8 @@ async def chat(
     history = [{"role": m.role, "content": m.content} for m in rows]
 
     reply = await ai.answer(
-        history, company_id=user.company_id, model=body.model, effort=body.effort
+        history, company_id=user.company_id, model=body.model, effort=body.effort,
+        attachments=att_blocks or None,
     )
 
     # Simpan balasan

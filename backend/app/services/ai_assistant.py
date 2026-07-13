@@ -16,6 +16,7 @@ import httpx
 from ..core.config import settings
 from ..core.database import SessionLocal
 from . import reports
+from . import reports_ext
 
 log = logging.getLogger("ananta.ai")
 
@@ -34,17 +35,28 @@ DEFAULT_MODEL = "claude-sonnet-5"
 EFFORT_BUDGET = {"low": 0, "medium": 4000, "high": 12000}
 DEFAULT_EFFORT = "medium"
 
+# Tool riset web bawaan Anthropic (dieksekusi di sisi server Anthropic).
+# Ada biaya per pencarian & akun API mungkin perlu mengaktifkannya.
+WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 5}
+
 SYSTEM_PROMPT = """Kamu adalah asisten AI di dalam aplikasi Ananta milik PT Ananta
 Surya Fajar (ASF), distributor minuman beralkohol (Minol) di Indonesia. Kamu
 membantu siapa pun yang bertanya — bebas topik apa pun, seperti asisten umum.
 
-Kamu punya keahlian khusus & AKSES DATA ke keuangan ASF lewat tool (laba rugi,
-neraca, piutang, nilai stok). Gunakan tool itu setiap pertanyaannya menyangkut
-kondisi keuangan/bisnis ASF, dan JANGAN mengarang angka — ambil dari tool.
+Kamu punya keahlian khusus & AKSES DATA ke keuangan ASF lewat tool: laba rugi,
+neraca, piutang (+ vs limit kredit), nilai stok, arus kas bulanan, performa
+penjualan per sales (Lempar/Collect), margin kotor (GPM), komisi sales, tren
+kuartalan, dan ringkasan pajak. Gunakan tool yang tepat setiap pertanyaannya
+menyangkut kondisi keuangan/bisnis ASF, dan JANGAN mengarang angka.
 
 Konteks industri yang kamu pahami bila relevan: regulasi NPPBKC; Golongan A
 (<5%), B (5-20%), C (>20%); rantai dingin (cold chain); HoReCa vs Modern Retail;
 "Omzet Lempar" (nilai faktur terbit) vs "Omzet Collect" (dana riil yang masuk).
+
+Kamu juga bisa RISET WEB (tool web_search) untuk info pasar, industri, harga
+komoditas, tren, kompetitor, dan regulasi. Serta bisa membaca FILE yang diunggah
+pengguna (PDF/gambar) bila dilampirkan. Untuk riset web: BOLEH soal pasar/industri/
+regulasi; DILARANG mengumpulkan/menyusun profil atau biodata pribadi seseorang.
 
 Aturan:
 - Untuk pertanyaan umum (di luar data ASF), jawab sewajarnya dari pengetahuanmu,
@@ -103,6 +115,72 @@ TOOLS = [
         "description": "Nilai persediaan saat ini per produk.",
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "get_cashflow",
+        "description": "Arus kas (masuk/keluar/bersih) per bulan untuk rentang tanggal. Default: awal tahun s/d hari ini.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string"},
+                "end_date": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "get_sales_kpi",
+        "description": "Performa penjualan per sales: jumlah faktur, omzet (Lempar), terbayar (Collect), rasio collect. Default: bulan berjalan.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string"},
+                "end_date": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "get_gross_margin",
+        "description": "Margin kotor / Gross Profit Margin (penjualan, HPP, laba kotor, %). Default: awal tahun s/d hari ini.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string"},
+                "end_date": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "get_commission",
+        "description": "Komisi sales untuk rentang tanggal (berdasarkan omzet terbayar). Default: bulan berjalan.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string"},
+                "end_date": {"type": "string"},
+                "rate": {"type": "number", "description": "Tarif komisi (mis. 0.05 = 5%). Default 0.05."},
+            },
+        },
+    },
+    {
+        "name": "get_quarterly_recap",
+        "description": "Tren per kuartal: omzet & HPP. Untuk melihat pertumbuhan antar kuartal.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_ar_limit",
+        "description": "Piutang tiap customer vs limit kredit mereka — siapa yang mendekati/melewati batas kredit.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_tax_summary",
+        "description": "Ringkasan pajak (mis. PPN keluaran/masukan) untuk rentang tanggal. Default: bulan berjalan.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string"},
+                "end_date": {"type": "string"},
+            },
+        },
+    },
 ]
 
 
@@ -124,6 +202,34 @@ async def _run_tool(name: str, args: dict, company_id: str) -> str:
                 )
             elif name == "get_stock_valuation":
                 data = await reports.stock_valuation(db, company_id)
+            elif name == "get_cashflow":
+                start = _pdate(args.get("start_date"), date(today.year, 1, 1))
+                end = _pdate(args.get("end_date"), today)
+                data = await reports_ext.cashflow(db, company_id, start=start, end=end)
+            elif name == "get_sales_kpi":
+                start = _pdate(args.get("start_date"), today.replace(day=1))
+                end = _pdate(args.get("end_date"), today)
+                data = await reports_ext.sales_kpi(db, company_id, start=start, end=end)
+            elif name == "get_gross_margin":
+                start = _pdate(args.get("start_date"), date(today.year, 1, 1))
+                end = _pdate(args.get("end_date"), today)
+                data = await reports_ext.gpm(db, company_id, start=start, end=end)
+            elif name == "get_commission":
+                start = _pdate(args.get("start_date"), today.replace(day=1))
+                end = _pdate(args.get("end_date"), today)
+                rate = args.get("rate")
+                rate = float(rate) if isinstance(rate, (int, float)) else 0.05
+                data = await reports_ext.commission(
+                    db, company_id, start=start, end=end, rate=rate
+                )
+            elif name == "get_quarterly_recap":
+                data = await reports_ext.quarterly_recap(db, company_id)
+            elif name == "get_ar_limit":
+                data = await reports_ext.ar_limit(db, company_id)
+            elif name == "get_tax_summary":
+                start = _pdate(args.get("start_date"), today.replace(day=1))
+                end = _pdate(args.get("end_date"), today)
+                data = await reports_ext.tax_summary(db, company_id, start=start, end=end)
             else:
                 return json.dumps({"error": f"tool tak dikenal: {name}"})
         return json.dumps(data, default=str, ensure_ascii=False)
@@ -158,7 +264,7 @@ async def _call_api(messages: list, model: str, effort: str) -> dict:
         "model": model,
         "max_tokens": 1500 + budget,
         "system": SYSTEM_PROMPT,
-        "tools": TOOLS,
+        "tools": TOOLS + [WEB_SEARCH_TOOL],
         "messages": messages,
     }
     if budget > 0:
@@ -174,14 +280,20 @@ async def _call_api(messages: list, model: str, effort: str) -> dict:
         raise
 
 
-async def answer(history: list[dict], company_id: str, model=None, effort=None) -> str:
-    """history: [{role, content}] -> teks jawaban."""
+async def answer(history: list[dict], company_id: str, model=None, effort=None,
+                 attachments=None) -> str:
+    """history: [{role, content}] -> teks jawaban. attachments: blok konten (dokumen/gambar)."""
     if not settings.ANTHROPIC_API_KEY:
         return "Fitur AI belum aktif (ANTHROPIC_API_KEY belum diset di Railway)."
 
     model = normalize_model(model)
     effort = normalize_effort(effort)
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
+    # Tempelkan lampiran (PDF/gambar) ke pesan user terakhir.
+    if attachments and messages and messages[-1]["role"] == "user":
+        blocks = list(attachments)
+        blocks.append({"type": "text", "text": messages[-1]["content"]})
+        messages[-1] = {"role": "user", "content": blocks}
     try:
         for _ in range(MAX_TOOL_ROUNDS):
             resp = await _call_api(messages, model, effort)

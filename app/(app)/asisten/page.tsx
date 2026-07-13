@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Sparkles, ArrowUp, Plus, Trash2, PanelLeft, ChevronDown,
+  Sparkles, ArrowUp, Plus, Trash2, PanelLeft, ChevronDown, Paperclip, X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -105,18 +105,55 @@ export default function AsistenPage() {
     loadConvs();
   }
 
+  type Attach = { name: string; kind: "image" | "document"; media_type: string; data: string };
+  const [attachments, setAttachments] = useState<Attach[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function onFiles(files: FileList | null) {
+    if (!files) return;
+    const list: Attach[] = [];
+    for (const f of Array.from(files).slice(0, 5)) {
+      const data = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).split(",")[1] || "");
+        r.onerror = rej;
+        r.readAsDataURL(f);
+      });
+      list.push({
+        name: f.name,
+        kind: f.type.startsWith("image/") ? "image" : "document",
+        media_type: f.type || "application/octet-stream",
+        data,
+      });
+    }
+    setAttachments((prev) => [...prev, ...list].slice(0, 5));
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   async function send(text: string) {
     const q = text.trim();
-    if (!q || loading) return;
-    const next = [...messages, { role: "user", content: q } as Msg];
+    if ((!q && attachments.length === 0) || loading) return;
+    const shown = q || "(lampiran)";
+    const next = [...messages, { role: "user", content: shown } as Msg];
     setMessages(next);
     setInput("");
     if (taRef.current) taRef.current.style.height = "auto";
+    const sendAtt = attachments.map((a) => ({ kind: a.kind, media_type: a.media_type, data: a.data }));
+    setAttachments([]);
     setLoading(true);
     try {
       const res = await api<{ conversation_id: string; title: string; reply: string }>(
         "/ai/chat",
-        { method: "POST", body: JSON.stringify({ conversation_id: activeId, message: q, model, effort }) },
+        {
+          method: "POST",
+          body: JSON.stringify({
+            conversation_id: activeId,
+            message: q || "Tolong analisis lampiran ini.",
+            model,
+            effort,
+            attachments: sendAtt.length ? sendAtt : undefined,
+          }),
+        },
       );
       setMessages([...next, { role: "assistant", content: res.reply }]);
       if (!activeId) {
@@ -250,7 +287,42 @@ export default function AsistenPage() {
         {/* Composer */}
         <div className="bg-gradient-to-t from-[var(--canvas)] to-transparent px-4 pb-4 pt-2">
           <div className="mx-auto w-full max-w-3xl">
+            {attachments.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {attachments.map((a, i) => (
+                  <span
+                    key={i}
+                    className="flex items-center gap-1.5 rounded-[var(--radius-input)] border border-line bg-surface px-2.5 py-1 text-caption text-ink-muted"
+                  >
+                    <Paperclip size={12} />
+                    <span className="max-w-[160px] truncate">{a.name}</span>
+                    <button
+                      onClick={() => setAttachments((p) => p.filter((_, j) => j !== i))}
+                      aria-label="Hapus lampiran"
+                      className="text-ink-subtle hover:text-danger"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2 rounded-2xl border border-line bg-surface px-3 py-2 shadow-[var(--shadow-pop)] transition-colors focus-within:border-primary">
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => onFiles(e.target.files)}
+              />
+              <button
+                onClick={() => fileRef.current?.click()}
+                aria-label="Lampirkan file"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface-sunken"
+              >
+                <Paperclip size={17} />
+              </button>
               <textarea
                 ref={taRef}
                 rows={1}
@@ -262,7 +334,7 @@ export default function AsistenPage() {
               />
               <button
                 onClick={() => send(input)}
-                disabled={!input.trim() || loading}
+                disabled={(!input.trim() && attachments.length === 0) || loading}
                 aria-label="Kirim"
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-white transition-colors hover:bg-[var(--primary-hover)] disabled:opacity-40"
               >
