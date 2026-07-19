@@ -331,6 +331,9 @@ async def _answer_openai(history: list[dict], company_id: str, model: str) -> st
                 "messages": messages,
                 "tools": tools,
                 "max_completion_tokens": 2000,
+                # GPT-5.x: tools + reasoning tak didukung di chat/completions,
+                # kecuali reasoning_effort='none'. Set none agar function tools jalan.
+                "reasoning_effort": "none",
             }
             resp = await _post_openai(payload, headers)
             choice = (resp.get("choices") or [{}])[0].get("message", {})
