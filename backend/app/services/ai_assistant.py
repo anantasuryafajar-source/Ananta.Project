@@ -31,6 +31,16 @@ ALLOWED_MODELS = {
 }
 DEFAULT_MODEL = "claude-sonnet-5"
 
+# --- Agent OpenAI (ChatGPT) ---
+OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_MODELS = {
+    "gpt-5.6-sol": "GPT-5.6 Sol (paling pintar)",
+    "gpt-5.6-terra": "GPT-5.6 Terra (seimbang)",
+    "gpt-5.6-luna": "GPT-5.6 Luna (cepat/murah)",
+}
+# Daftar gabungan untuk dropdown & validasi.
+ALL_MODELS = {**ALLOWED_MODELS, **OPENAI_MODELS}
+
 # Effort -> anggaran token berpikir (extended thinking). Low = tanpa thinking.
 EFFORT_BUDGET = {"low": 0, "medium": 4000, "high": 12000}
 DEFAULT_EFFORT = "medium"
@@ -239,7 +249,7 @@ async def _run_tool(name: str, args: dict, company_id: str) -> str:
 
 
 def normalize_model(model: str | None) -> str:
-    return model if model in ALLOWED_MODELS else (settings.ANTHROPIC_MODEL or DEFAULT_MODEL)
+    return model if model in ALL_MODELS else (settings.ANTHROPIC_MODEL or DEFAULT_MODEL)
 
 
 def normalize_effort(effort: str | None) -> str:
@@ -280,6 +290,87 @@ async def _call_api(messages: list, model: str, effort: str) -> dict:
         raise
 
 
+def _openai_tools():
+    """Konversi TOOLS (format Anthropic) ke format function-calling OpenAI."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": t["input_schema"],
+            },
+        }
+        for t in TOOLS
+    ]
+
+
+async def _post_openai(payload: dict, headers: dict) -> dict:
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(OPENAI_URL, headers=headers, json=payload)
+        r.raise_for_status()
+        return r.json()
+
+
+async def _answer_openai(history: list[dict], company_id: str, model: str) -> str:
+    """Jalur agent ChatGPT: chat + alat baca data ASF (function calling)."""
+    if not settings.OPENAI_API_KEY:
+        return "Agent ChatGPT belum aktif (OPENAI_API_KEY belum diset di Railway)."
+
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "content-type": "application/json",
+    }
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages += [{"role": m["role"], "content": m["content"]} for m in history]
+    tools = _openai_tools()
+    try:
+        for _ in range(MAX_TOOL_ROUNDS):
+            payload = {
+                "model": model,
+                "messages": messages,
+                "tools": tools,
+                "max_completion_tokens": 2000,
+            }
+            resp = await _post_openai(payload, headers)
+            choice = (resp.get("choices") or [{}])[0].get("message", {})
+            tool_calls = choice.get("tool_calls")
+            if not tool_calls:
+                return (choice.get("content") or "").strip() or "(tidak ada jawaban)"
+            # rekam pesan asisten (berisi tool_calls) lalu jalankan tiap tool
+            messages.append(choice)
+            for tc in tool_calls:
+                fn = tc.get("function", {})
+                try:
+                    args = json.loads(fn.get("arguments") or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+                out = await _run_tool(fn.get("name", ""), args, company_id)
+                messages.append(
+                    {"role": "tool", "tool_call_id": tc.get("id"), "content": out}
+                )
+        return "Analisis terlalu panjang; coba persempit pertanyaannya."
+    except httpx.HTTPStatusError as e:  # pragma: no cover
+        detail = ""
+        try:
+            detail = (e.response.json().get("error", {}) or {}).get("message", "") or ""
+        except Exception:
+            detail = (e.response.text or "")[:300]
+        status = e.response.status_code
+        log.warning("OpenAI API %s: %s", status, detail)
+        hint = ""
+        if status in (401, 403):
+            hint = " (cek OPENAI_API_KEY di Railway)"
+        elif status == 429 or "quota" in detail.lower() or "billing" in detail.lower():
+            hint = " (saldo/billing OpenAI belum cukup)"
+        elif status == 404 and "model" in detail.lower():
+            hint = " (nama model GPT tidak dikenal akunmu)"
+        return f"Galat OpenAI {status}: {detail or 'tidak diketahui'}{hint}"
+    except Exception as e:  # pragma: no cover
+        log.warning("OpenAI gagal: %s", e)
+        return "Maaf, terjadi kesalahan saat memanggil ChatGPT."
+
+
 async def answer(history: list[dict], company_id: str, model=None, effort=None,
                  attachments=None) -> str:
     """history: [{role, content}] -> teks jawaban. attachments: blok konten (dokumen/gambar)."""
@@ -288,6 +379,11 @@ async def answer(history: list[dict], company_id: str, model=None, effort=None,
 
     model = normalize_model(model)
     effort = normalize_effort(effort)
+
+    # Jika model OpenAI (ChatGPT), pakai jalur OpenAI (chat + alat baca data ASF).
+    if model in OPENAI_MODELS:
+        return await _answer_openai(history, company_id, model)
+
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
     # Tempelkan lampiran (PDF/gambar) ke pesan user terakhir.
     if attachments and messages and messages[-1]["role"] == "user":

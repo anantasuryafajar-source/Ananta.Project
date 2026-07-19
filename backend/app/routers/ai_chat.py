@@ -46,7 +46,7 @@ async def _owned_conv(db: AsyncSession, conv_id: str, user: User) -> AiConversat
 @router.get("/config")
 async def ai_config(user: User = Depends(require_roles("finance"))):
     return {
-        "models": [{"id": k, "label": v} for k, v in ai.ALLOWED_MODELS.items()],
+        "models": [{"id": k, "label": v} for k, v in ai.ALL_MODELS.items()],
         "default_model": ai.DEFAULT_MODEL,
         "efforts": [
             {"id": "low", "label": "Rendah"},

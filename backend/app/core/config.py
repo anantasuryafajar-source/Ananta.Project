@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # --- Asisten AI web ---
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
+    # Agent OpenAI (ChatGPT). Kosong = opsi GPT nonaktif.
+    OPENAI_API_KEY: str = ""
     # Chat ID Telegram owner untuk bootstrap penautan pertama (sementara).
     TELEGRAM_OWNER_CHAT_ID: str = ""
 
