@@ -1,10 +1,14 @@
 """Endpoint Asisten AI web. Mount di /api/v1/ai/... (TERPISAH dari bot Telegram).
 
-- POST   /ai/chat                       kirim pesan, dapat balasan (+persist)
+- POST   /ai/chat                       kirim pesan (+mode), dapat balasan (+persist)
 - GET    /ai/conversations              daftar percakapan pengguna
 - GET    /ai/conversations/{id}/messages   isi satu percakapan
 - DELETE /ai/conversations/{id}         hapus percakapan
-- GET    /ai/config                     daftar model & effort untuk dropdown
+- GET    /ai/config                     daftar model, effort & MODE untuk dropdown
+
+Frontend tinggal kirim:  {"message": "...", "mode": "marketing"}
+Kalau mode tidak dikirim (atau "auto"), backend melakukan Intent Detection dan
+mengembalikan mode terpilih di respons ({"mode": "...", "mode_detected": true}).
 """
 from datetime import datetime, timezone
 
@@ -16,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import get_db
 from ..deps import require_roles
 from ..models import AiConversation, AiMessage, User
-from ..services import ai_assistant as ai
+from ..services import ai
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -24,7 +28,8 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 class ChatIn(BaseModel):
     conversation_id: str | None = None
     message: str
-    model: str | None = None
+    mode: str | None = None    # "general"|"marketing"|... ; None/"auto" = intent detection
+    model: str | None = None   # None/"auto" = model router pilih per mode
     effort: str | None = None
     attachments: list[dict] | None = None  # [{kind:"document"|"image", media_type, data(base64)}]
 
@@ -48,6 +53,8 @@ async def ai_config(user: User = Depends(require_roles("finance"))):
     return {
         "models": [{"id": k, "label": v} for k, v in ai.ALL_MODELS.items()],
         "default_model": ai.DEFAULT_MODEL,
+        "modes": [{"id": m, "label": ai.MODE_LABELS[m]} for m in ai.MODES],
+        "default_mode": ai.DEFAULT_MODE,
         "efforts": [
             {"id": "low", "label": "Rendah"},
             {"id": "medium", "label": "Sedang"},
@@ -166,14 +173,25 @@ async def chat(
     ).scalars().all()
     history = [{"role": m.role, "content": m.content} for m in rows]
 
-    reply = await ai.answer(
-        history, company_id=user.company_id, model=body.model, effort=body.effort,
+    result = await ai.answer(
+        history,
+        company_id=user.company_id,
+        mode=body.mode,
+        model=body.model,
+        effort=body.effort,
         attachments=att_blocks or None,
     )
 
     # Simpan balasan
-    db.add(AiMessage(conversation_id=conv.id, role="assistant", content=reply))
+    db.add(AiMessage(conversation_id=conv.id, role="assistant", content=result.reply))
     conv.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
-    return {"conversation_id": conv.id, "title": conv.title, "reply": reply}
+    return {
+        "conversation_id": conv.id,
+        "title": conv.title,
+        "reply": result.reply,
+        "mode": result.mode,
+        "mode_detected": result.mode_detected,
+        "model": result.model,
+    }
