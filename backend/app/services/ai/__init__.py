@@ -87,9 +87,12 @@ async def answer(
     mode: salah satu MODES, atau None/'auto' -> intent detection.
     model: id model, atau None/'auto' -> model router.
     """
-    if not settings.ANTHROPIC_API_KEY:
+    if not settings.ANTHROPIC_API_KEY and not settings.OPENAI_API_KEY:
         return AnswerResult(
-            reply="Fitur AI belum aktif (ANTHROPIC_API_KEY belum diset di Railway).",
+            reply=(
+                "Fitur AI belum aktif. Set ANTHROPIC_API_KEY atau "
+                "OPENAI_API_KEY di environment backend."
+            ),
             mode=DEFAULT_MODE, model=DEFAULT_MODEL, mode_detected=False,
         )
 
