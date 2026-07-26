@@ -196,7 +196,7 @@ async def chat(
                     profile_target,
                     model=body.model,
                     effort=body.effort,
-                    include_images=True,
+                    include_images=False,
                 )
                 reply = profiling_reply(result)
                 final_model = result.get("model") or profiling.DEFAULT_PROFILING_MODEL

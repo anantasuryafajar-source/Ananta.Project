@@ -41,9 +41,13 @@ class Settings(BaseSettings):
 
     # --- PROFILING 2.0 via slash command /profiling ---
     PROFILING_OPENAI_MODEL: str = "gpt-5.6-terra"
-    PROFILING_OPENAI_TIMEOUT_SECONDS: int = 300
-    PROFILING_RESEARCH_MAX_OUTPUT_TOKENS: int = 14000
-    PROFILING_SYNTHESIS_MAX_OUTPUT_TOKENS: int = 18000
+    PROFILING_OPENAI_TIMEOUT_SECONDS: int = 180
+    # Tanpa retry panjang agar request tidak melewati timeout proxy/frontend.
+    PROFILING_OPENAI_MAX_RETRIES: int = 0
+    # Mode stabil: satu panggilan, konteks web rendah, reasoning medium.
+    PROFILING_SEARCH_CONTEXT_SIZE: str = "low"
+    PROFILING_OPENAI_EFFORT: str = "medium"
+    PROFILING_OUTPUT_MAX_TOKENS: int = 9000
     PROFILING_BLOCKED_DOMAINS: str = "reddit.com,quora.com,wikipedia.org"
 
     # Chat ID Telegram owner untuk bootstrap penautan pertama (sementara).
