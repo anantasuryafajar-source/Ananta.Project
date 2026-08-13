@@ -14,11 +14,17 @@ type Bill = {
   total: string; paid_total: string;
 };
 type Contact = { id: string; name: string; type: string };
-type Product = { id: string; name: string; purchase_price: string };
+type Product = {
+  id: string; name: string;
+  purchase_price: string;        // modal per botol
+  pack_purchase_price: string;   // modal per dus
+  pack_size: number;
+};
 
 type Line = {
   product_id: string; description: string;
-  quantity: string; unit_cost: string; discount: string; tax_rate: string;
+  quantity: string; unit: "dus" | "botol";
+  unit_cost: string; discount: string; tax_rate: string;
 };
 
 const STATUS: Record<string, string> = {
@@ -27,8 +33,9 @@ const STATUS: Record<string, string> = {
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+// Pembelian dari supplier ASF umumnya per dus, jadi itu default di sini.
 const baris = (): Line => ({
-  product_id: "", description: "", quantity: "1",
+  product_id: "", description: "", quantity: "1", unit: "dus",
   unit_cost: "0", discount: "0", tax_rate: "0",
 });
 
@@ -102,13 +109,28 @@ export default function PembelianPage() {
   function setLine(i: number, patch: Partial<Line>) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
+  /** Modal acuan mengikuti satuan baris: per dus atau per botol. */
+  function modalAcuan(p: Product | undefined, unit: string): string {
+    if (!p) return "0";
+    return unit === "dus" ? p.pack_purchase_price : p.purchase_price;
+  }
+
   function pilihProduk(i: number, pid: string) {
     const p = products.find((x) => x.id === pid);
     setLine(i, {
       product_id: pid,
       description: p?.name ?? "",
-      unit_cost: p ? p.purchase_price : lines[i].unit_cost,
+      unit_cost: modalAcuan(p, lines[i].unit),
     });
+  }
+
+  function pilihSatuan(i: number, unit: "dus" | "botol") {
+    const p = products.find((x) => x.id === lines[i].product_id);
+    setLine(i, { unit, ...(p ? { unit_cost: modalAcuan(p, unit) } : {}) });
+  }
+
+  function isiDus(l: Line): number | null {
+    return products.find((x) => x.id === l.product_id)?.pack_size ?? null;
   }
 
   const total = lines.reduce((s, l) => s + lineTotal(l), 0);
@@ -130,7 +152,9 @@ export default function PembelianPage() {
           lines: valid.map((l) => ({
             product_id: l.product_id || null,
             description: l.description || null,
+            // quantity & unit_cost mengikuti satuan yang dipilih di baris ini.
             quantity: l.quantity,
+            unit: l.unit,
             unit_cost: l.unit_cost || "0",
             discount: l.discount || "0",
             tax_rate: l.tax_rate || "0",
@@ -235,7 +259,8 @@ export default function PembelianPage() {
                 <thead><tr className="border-b border-line bg-surface-sunken text-left text-caption text-ink-muted">
                   <th className="px-2 py-2 font-medium">Produk / Deskripsi</th>
                   <th className="px-2 py-2 text-right font-medium">Qty</th>
-                  <th className="px-2 py-2 text-right font-medium">Harga Beli</th>
+                  <th className="px-2 py-2 font-medium">Satuan</th>
+                  <th className="px-2 py-2 text-right font-medium">Modal / Satuan</th>
                   <th className="px-2 py-2 text-right font-medium">Diskon</th>
                   <th className="px-2 py-2 text-right font-medium">Pajak %</th>
                   <th className="px-2 py-2 text-right font-medium">Subtotal</th>
@@ -256,6 +281,18 @@ export default function PembelianPage() {
                         )}
                       </td>
                       <td className="px-2 py-1.5 w-20"><NumCell value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
+                      <td className="px-2 py-1.5 w-24">
+                        <Select value={l.unit}
+                          onChange={(e) => pilihSatuan(i, e.target.value as "dus" | "botol")}>
+                          <option value="dus">dus</option>
+                          <option value="botol">botol</option>
+                        </Select>
+                        {l.unit === "dus" && isiDus(l) && (
+                          <span className="mt-0.5 block text-center text-caption text-ink-subtle">
+                            {isiDus(l)} btl
+                          </span>
+                        )}
+                      </td>
                       <td className="px-2 py-1.5 w-28"><NumCell value={l.unit_cost} onChange={(e) => setLine(i, { unit_cost: e.target.value })} /></td>
                       <td className="px-2 py-1.5 w-24"><NumCell value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value })} /></td>
                       <td className="px-2 py-1.5 w-16"><NumCell value={l.tax_rate} onChange={(e) => setLine(i, { tax_rate: e.target.value })} /></td>

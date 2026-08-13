@@ -23,14 +23,17 @@ class StockRow(ORMModel):
     sku: str
     name: str
     warehouse_id: str
-    quantity: Decimal
-    avg_cost: Decimal
+    quantity: Decimal        # dalam botol (satuan dasar)
+    avg_cost: Decimal        # per botol
+    pack_size: int           # isi per dus, untuk menampilkan "1 dus 5 botol"
+    qty_display: str         # mis. "1 dus 5 botol"
 
 
 # ============================= TRANSFER =============================
 class TransferLineIn(BaseModel):
     product_id: str
     quantity: Decimal = Field(gt=0)
+    unit: str = Field(default="botol", pattern="^(dus|botol)$")
 
 
 class TransferIn(BaseModel):
@@ -74,9 +77,11 @@ class CourierOut(ORMModel):
 
 # ============================= ORDERS (PO/SO) =============================
 class OrderLineIn(BaseModel):
+    """`quantity` & `unit_price` mengikuti `unit` (unit="dus" -> per dus)."""
     product_id: str | None = None
     description: str | None = None
     quantity: Decimal = Field(gt=0)
+    unit: str = Field(default="botol", pattern="^(dus|botol)$")
     unit_price: Decimal = Field(ge=0)  # unit_cost utk PO, unit_price utk SO
     discount: Decimal = Decimal("0")
     tax_rate: Decimal = Decimal("0")
@@ -105,7 +110,9 @@ class SalesOrderIn(BaseModel):
 class OrderLineOut(ORMModel):
     id: str
     description: str
-    quantity: Decimal
+    quantity: Decimal        # dalam botol (satuan dasar)
+    qty_input: Decimal       # seperti diketik user
+    unit: str                # "dus" | "botol"
     line_total: Decimal
 
 

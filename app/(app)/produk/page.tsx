@@ -13,14 +13,22 @@ import { Field, Select } from "@/components/ui/form";
 
 type Product = {
   id: string; sku: string; name: string; unit: string;
-  sale_price: string; purchase_price: string;
+  pack_unit: string; pack_size: number;
+  pack_purchase_price: string;   // modal per dus (yang diketik)
+  purchase_price: string;        // modal per botol (dihitung sistem)
+  min_stock: string;
 };
-type StockItem = { sku: string; quantity: string; avg_cost: string; value: string };
+type StockItem = {
+  sku: string; quantity: string; qty_display: string;
+  avg_cost: string; value: string;
+};
 type Stock = { items: StockItem[]; total_value: string };
 
+// Harga jual TIDAK ada di master produk: berbeda per customer, ditentukan saat
+// pembuatan faktur penjualan. SKU juga tidak diketik — dibuat otomatis.
 const KOSONG = {
-  sku: "", name: "", kind: "good", unit: "pcs",
-  sale_price: "0", purchase_price: "0", min_stock: "0",
+  name: "", kind: "good", pack_size: "12",
+  pack_purchase_price: "0", min_stock: "0",
 };
 
 export default function ProdukPage() {
@@ -42,10 +50,10 @@ export default function ProdukPage() {
     try {
       const rows = await readSheet(file);
       if (rows.length === 0) throw new Error("File kosong atau tanpa data.");
-      const first = rows[0];
-      for (const col of ["sku", "name"]) {
-        if (!(col in first)) throw new Error(`Kolom wajib: ${["sku", "name"].join(", ")}.`);
-      }
+      // Hanya `name` yang wajib. Kolom lain opsional: `pack_size` (isi per dus,
+      // default 12) dan `purchase_price` yang dibaca sebagai modal PER DUS.
+      if (!("name" in rows[0]))
+        throw new Error("Kolom wajib: name. Opsional: pack_size (isi per dus), purchase_price (modal per dus), min_stock.");
       const res = await api<{ created: number; updated: number; failed: { row: number; reason: string }[] }>(
         "/products/import", { method: "POST", body: JSON.stringify({ rows }) });
       const failNote = res.failed.length
@@ -78,24 +86,25 @@ export default function ProdukPage() {
     setFormError(null);
     // --- validasi ramah ---
     if (!form.name.trim()) return setFormError("Nama produk wajib diisi.");
-    if (!form.sku.trim()) return setFormError("SKU wajib diisi.");
-    const modal = Number(form.purchase_price || 0);
-    const jual = Number(form.sale_price || 0);
+    const modalDus = Number(form.pack_purchase_price || 0);
+    const isiDus = Number(form.pack_size || 0);
     const minst = Number(form.min_stock || 0);
-    if (modal < 0 || jual < 0 || minst < 0) return setFormError("Harga & stok minimum tidak boleh negatif.");
-    if (jual > 0 && modal > 0 && jual < modal)
-      return setFormError("Harga jual di bawah harga modal — periksa kembali (rugi per unit).");
+    if (modalDus < 0 || minst < 0)
+      return setFormError("Harga modal & stok minimum tidak boleh negatif.");
+    if (!Number.isInteger(isiDus) || isiDus < 1)
+      return setFormError("Isi per dus harus bilangan bulat minimal 1 (mis. 12, 24, 48).");
     setSaving(true);
     try {
       await api(editId ? `/products/${editId}` : "/products", {
         method: editId ? "PATCH" : "POST",
         body: JSON.stringify({
-          sku: form.sku.trim(),
           name: form.name.trim(),
           kind: form.kind,
-          unit: form.unit.trim() || "pcs",
-          sale_price: form.sale_price || "0",
-          purchase_price: form.purchase_price || "0",
+          unit: "botol",
+          pack_unit: "dus",
+          pack_size: isiDus,
+          // Modal dikirim per DUS; backend membagi ke per botol.
+          pack_purchase_price: form.pack_purchase_price || "0",
           min_stock: form.min_stock || "0",
         }),
       });
@@ -113,9 +122,10 @@ export default function ProdukPage() {
     setFormError(null);
     setEditId(p.id);
     setForm({
-      sku: p.sku, name: p.name, kind: "good", unit: p.unit,
-      sale_price: p.sale_price, purchase_price: p.purchase_price,
-      min_stock: (p as any).min_stock ?? "0",
+      name: p.name, kind: "good",
+      pack_size: String(p.pack_size ?? 12),
+      pack_purchase_price: p.pack_purchase_price ?? "0",
+      min_stock: p.min_stock ?? "0",
     });
     setOpen(true);
   }
@@ -127,6 +137,14 @@ export default function ProdukPage() {
       muat();
     } catch (e) { setError(e instanceof Error ? e.message : "Gagal menghapus."); }
   }
+
+  // Pratinjau modal per botol supaya user langsung sadar kalau salah satuan.
+  const modalPerBotol = useMemo(() => {
+    const dus = Number(form.pack_purchase_price || 0);
+    const isi = Number(form.pack_size || 0);
+    if (!dus || !isi || isi < 1) return null;
+    return dus / isi;
+  }, [form.pack_purchase_price, form.pack_size]);
 
   const filtered = useMemo(() => {
     if (!items) return null;
@@ -167,10 +185,10 @@ export default function ProdukPage() {
           <Card className="overflow-hidden p-0">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-left text-caption text-ink-muted">
-                <th className="px-4 py-3 font-medium">SKU</th>
                 <th className="px-4 py-3 font-medium">Nama</th>
-                <th className="px-4 py-3 text-right font-medium">Modal</th>
-                <th className="px-4 py-3 text-right font-medium">Harga Jual</th>
+                <th className="px-4 py-3 text-center font-medium">Isi/Dus</th>
+                <th className="px-4 py-3 text-right font-medium">Modal / Dus</th>
+                <th className="px-4 py-3 text-right font-medium">Modal / Botol</th>
                 <th className="px-4 py-3 text-right font-medium">Stok</th>
                 <th className="px-4 py-3 text-right font-medium">Nilai</th>
                 <th className="w-16" />
@@ -180,11 +198,12 @@ export default function ProdukPage() {
                   const s = stock[p.sku];
                   return (
                     <tr key={p.id} className="border-b border-line last:border-0 hover:bg-surface-sunken">
-                      <td className="px-4 py-3 text-ink-muted">{p.sku}</td>
                       <td className="px-4 py-3 text-ink">{p.name}</td>
+                      <td className="px-4 py-3 text-center tabular-nums text-ink-muted">{p.pack_size} btl</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink">{rupiah(p.pack_purchase_price)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{rupiah(p.purchase_price)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-ink">{rupiah(p.sale_price)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{s ? Number(s.quantity) : 0}</td>
+                      {/* Stok disimpan dalam botol, ditampilkan sebagai "1 dus 5 botol". */}
+                      <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{s ? s.qty_display : "0 botol"}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink">{s ? rupiah(s.value) : rupiah(0)}</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
@@ -209,9 +228,9 @@ export default function ProdukPage() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? "Edit Produk" : "Tambah Produk"}>
         <form onSubmit={simpan} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="SKU">
-              <Input value={form.sku} onChange={(e) => set("sku", e.target.value)} required placeholder="BRG-001" />
+          <div className="grid grid-cols-[1fr_auto] gap-4">
+            <Field label="Nama Produk">
+              <Input value={form.name} onChange={(e) => set("name", e.target.value)} required placeholder="Chivas 200ml" />
             </Field>
             <Field label="Jenis">
               <Select value={form.kind} onChange={(e) => set("kind", e.target.value)}>
@@ -220,23 +239,35 @@ export default function ProdukPage() {
               </Select>
             </Field>
           </div>
-          <Field label="Nama Produk">
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} required placeholder="Contoh Produk" />
-          </Field>
-          <div className="grid grid-cols-3 gap-4">
-            <Field label="Satuan">
-              <Input value={form.unit} onChange={(e) => set("unit", e.target.value)} placeholder="pcs" />
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Isi per Dus (botol)">
+              <Input type="number" min={1} step={1} value={form.pack_size}
+                onChange={(e) => set("pack_size", e.target.value)} placeholder="12" />
             </Field>
-            <Field label="Harga Beli (Rp)">
-              <Input type="number" min={0} value={form.purchase_price} onChange={(e) => set("purchase_price", e.target.value)} />
-            </Field>
-            <Field label="Harga Jual (Rp)">
-              <Input type="number" min={0} value={form.sale_price} onChange={(e) => set("sale_price", e.target.value)} />
+            {/* Label harus eksplisit "per dus": inilah cara client mencatat modal,
+                dan salah baca sebagai per botol membuat HPP salah 12-48x. */}
+            <Field label="Harga Modal per DUS (Rp)">
+              <Input type="number" min={0} value={form.pack_purchase_price}
+                onChange={(e) => set("pack_purchase_price", e.target.value)} placeholder="1800000" />
             </Field>
           </div>
-          <Field label="Stok Minimum">
+
+          {modalPerBotol !== null && (
+            <p className="-mt-2 text-caption text-ink-muted">
+              Setara <span className="tabular-nums text-ink">{rupiah(modalPerBotol)}</span> per botol
+              {" "}({form.pack_size} botol per dus). Stok & HPP dihitung per botol.
+            </p>
+          )}
+
+          <Field label="Stok Minimum (botol)">
             <Input type="number" min={0} value={form.min_stock} onChange={(e) => set("min_stock", e.target.value)} />
           </Field>
+
+          <p className="text-caption text-ink-subtle">
+            Harga jual tidak diisi di sini — berbeda tiap customer dan ditentukan
+            saat membuat faktur penjualan.
+          </p>
 
           {formError && <p className="text-sm text-danger">{formError}</p>}
 

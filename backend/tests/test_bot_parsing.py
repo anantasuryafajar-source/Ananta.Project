@@ -101,12 +101,50 @@ def test_parse_payment_block():
 
 
 def test_parse_item_line():
-    from app.bot.parsing import parse_item_line
-    assert parse_item_line("MNS-WHK x 10 @ 250000") == ("MNS-WHK", Decimal("10"), Decimal("250000"))
-    assert parse_item_line("CLA-AZL x 5 @ 800.000") == ("CLA-AZL", Decimal("5"), Decimal("800000"))
-    assert parse_item_line("BOXES x 3 @ 0") == ("BOXES", Decimal("3"), Decimal("0"))  # X dalam SKU aman
+    """Satuan WAJIB ada di baris item; bot tidak boleh menebak."""
+    import pytest
+    from app.bot.parsing import ItemUnitMissing, parse_item_line
+
+    assert parse_item_line("MNS-WHK x 10 dus @ 250000") == (
+        "MNS-WHK", Decimal("10"), "dus", Decimal("250000"))
+    assert parse_item_line("CLA-AZL x 5 botol @ 800.000") == (
+        "CLA-AZL", Decimal("5"), "botol", Decimal("800000"))
+    # alias satuan & huruf besar tetap dikenali
+    assert parse_item_line("MNS-WHK x 2 DUS @ 100") == (
+        "MNS-WHK", Decimal("2"), "dus", Decimal("100"))
+    assert parse_item_line("MNS-WHK x 2 btl @ 100") == (
+        "MNS-WHK", Decimal("2"), "botol", Decimal("100"))
+    # 'X' di dalam SKU tetap aman
+    assert parse_item_line("BOXES x 3 botol @ 0") == (
+        "BOXES", Decimal("3"), "botol", Decimal("0"))
+
     assert parse_item_line("ngawur") is None
-    assert parse_item_line("SKU x 0 @ 100") is None  # qty harus > 0
+    assert parse_item_line("SKU x 0 dus @ 100") is None      # qty harus > 0
+    assert parse_item_line("SKU x 2 lusin @ 100") is None    # satuan tak dikenal
+
+    # Format lama tanpa satuan DITOLAK dengan galat khusus, bukan ditebak.
+    with pytest.raises(ItemUnitMissing):
+        parse_item_line("MNS-WHK x 10 @ 250000")
+
+
+def test_parse_product_block_membaca_modal_per_dus():
+    """Bug lama: nilai 'Harga' tersimpan sebagai harga JUAL sehingga modal produk
+    selalu kosong di web. Sekarang dibaca sebagai modal per DUS."""
+    from app.bot.parsing import parse_product_block
+
+    got = parse_product_block(
+        "Nama: Chivas 200ml\nIsi per dus: 24\nModal per dus: 1800000"
+    )
+    assert got["name"] == "Chivas 200ml"
+    assert got["pack_raw"] == "24"
+    assert got["price_raw"] == "1800000"
+    # SKU tidak wajib lagi (dibuat otomatis dari nama)
+    assert "sku" not in got
+
+    # Sinonim yang wajar tetap dikenali
+    alias = parse_product_block("Nama: Mansion Vodka\nIsi: 12\nHarga: 1100000")
+    assert alias["pack_raw"] == "12"
+    assert alias["price_raw"] == "1100000"
 
 
 def test_parse_pengadaan_block():

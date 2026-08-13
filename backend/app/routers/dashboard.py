@@ -9,6 +9,7 @@ from ..models import (
     Journal, JournalEntry,
 )
 from ..deps import current_user
+from ..services.units import format_qty
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -119,16 +120,19 @@ async def summary(
 
     # ---- PERINGATAN ----
     # 1) stok di bawah minimum (agregat semua gudang)
+    # min_stock & quantity dalam BOTOL; ditampilkan ulang sebagai "dus + botol".
     stock_rows = (await db.execute(
-        select(Product.sku, Product.name, Product.min_stock,
+        select(Product.sku, Product.name, Product.min_stock, Product.pack_size,
                func.coalesce(func.sum(StockLevel.quantity), 0))
         .join(StockLevel, StockLevel.product_id == Product.id, isouter=True)
         .where(Product.company_id == cid)
-        .group_by(Product.id, Product.sku, Product.name, Product.min_stock)
+        .group_by(Product.id, Product.sku, Product.name, Product.min_stock,
+                  Product.pack_size)
     )).all()
     low_stock = [
-        {"sku": sku, "name": name, "quantity": _s(qty), "min_stock": _s(ms)}
-        for sku, name, ms, qty in stock_rows
+        {"sku": sku, "name": name, "quantity": _s(qty), "min_stock": _s(ms),
+         "qty_display": format_qty(qty, pack), "min_display": format_qty(ms, pack)}
+        for sku, name, ms, pack, qty in stock_rows
         if Decimal(str(ms or 0)) > 0 and Decimal(str(qty or 0)) < Decimal(str(ms))
     ][:8]
 

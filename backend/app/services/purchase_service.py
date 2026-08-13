@@ -11,6 +11,16 @@ Jurnal pembelian (barang):
 Stok masuk memakai metode AVERAGE: avg_cost baru dihitung tertimbang
     avg_baru = (qty_lama * avg_lama + qty_masuk * cost_masuk) / (qty_lama + qty_masuk)
 Inilah yang membuat HPP di faktur penjualan menjadi benar.
+
+SATUAN — titik paling rawan di seluruh sistem. Supplier biasanya menagih per DUS,
+tapi `avg_cost` HARUS per BOTOL. Karena itu biaya per satuan untuk valuasi dihitung
+dari nilai baris dibagi jumlah BOTOL (bukan jumlah dus):
+
+    beli 1 dus @ Rp 3.700.000, isi 12  ->  avg_cost = Rp 308.333,3333 / botol
+
+Kalau ini salah, seluruh HPP, valuasi persediaan, dan neraca ikut salah 12-48x,
+dan karena HPP sudah terposting ke jurnal, koreksinya harus lewat jurnal manual.
+Lihat services/units.py.
 """
 from __future__ import annotations
 from datetime import date, timedelta
@@ -23,13 +33,24 @@ from ..models import (
 from .journal import Line, post_journal
 from .numbering import next_number
 from .accounts_map import code_to_id
+from .units import BASE_UNIT, factor_for, to_base, try_normalize_unit
 
 CENT = Decimal("0.01")
 QTYQ = Decimal("0.0001")
+# Biaya per satuan disimpan 4 desimal (lihat UnitCost di models/base.py):
+# konversi dus->botol hampir selalu tidak bulat, dan 2 desimal membuat
+# valuasi stok melenceng dari saldo Persediaan di jurnal.
+COSTQ = Decimal("0.0001")
 
 
 def _q(v) -> Decimal:
+    """Nilai UANG (masuk jurnal) — selalu 2 desimal."""
     return Decimal(str(v)).quantize(CENT)
+
+
+def _qc(v) -> Decimal:
+    """Biaya PER SATUAN (avg_cost / unit_cost) — 4 desimal."""
+    return Decimal(str(v)).quantize(COSTQ)
 
 
 def compute_line(qty: Decimal, cost: Decimal, discount: Decimal, tax_rate: Decimal):
@@ -60,11 +81,12 @@ async def create_and_post_bill(
     stock_ops: list[tuple[Product, Decimal, Decimal]] = []  # (product, qty, unit_cost)
 
     for raw in lines_in:
-        qty = Decimal(str(raw["quantity"]))
+        # qty_input & cost mengikuti satuan yang dipilih user (dus atau botol).
+        qty_input = Decimal(str(raw["quantity"]))
         cost = Decimal(str(raw["unit_cost"]))
         discount = Decimal(str(raw.get("discount", 0)))
         tax_rate = Decimal(str(raw.get("tax_rate", 0)))
-        base, tax = compute_line(qty, cost, discount, tax_rate)
+        base, tax = compute_line(qty_input, cost, discount, tax_rate)
         subtotal += base
         tax_total += tax
 
@@ -74,17 +96,24 @@ async def create_and_post_bill(
                 select(Product).where(Product.id == raw["product_id"])
             )).scalar_one()
 
+        # Faktor DI-SNAPSHOT ke baris; jangan dibaca ulang dari master saat lapor.
+        unit = try_normalize_unit(raw.get("unit")) or BASE_UNIT
+        factor = factor_for(unit, product.pack_size if product else 1)
+        qty_base = to_base(qty_input, factor)
+
         bill_lines.append(BillLine(
             product_id=raw.get("product_id"),
             description=raw.get("description") or (product.name if product else ""),
-            quantity=qty, unit_cost=cost, discount=discount,
+            quantity=qty_base, qty_input=qty_input, unit=unit, unit_factor=factor,
+            unit_cost=cost, discount=discount,
             tax_rate=tax_rate, line_total=_q(base + tax),
         ))
 
         if product and product.kind == "good" and warehouse_id:
-            # cost per unit setelah diskon baris (untuk valuasi rata-rata)
-            eff_cost = base / qty if qty else Decimal("0")
-            stock_ops.append((product, qty, _q(eff_cost)))
+            # Biaya per BOTOL setelah diskon baris: nilai baris / jumlah botol.
+            # Membaginya dengan qty_input (dus) akan membuat avg_cost 12-48x salah.
+            eff_cost = base / qty_base if qty_base else Decimal("0")
+            stock_ops.append((product, qty_base, _qc(eff_cost)))
 
     subtotal, tax_total = _q(subtotal), _q(tax_total)
     total = _q(subtotal + tax_total)
@@ -138,7 +167,7 @@ async def create_and_post_bill(
         else:
             new_avg = unit_cost
         level.quantity = new_qty.quantize(QTYQ)
-        level.avg_cost = _q(new_avg)
+        level.avg_cost = _qc(new_avg)
 
         db.add(StockMovement(
             company_id=company_id, product_id=product.id,

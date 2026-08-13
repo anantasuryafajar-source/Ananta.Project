@@ -15,11 +15,18 @@ type Invoice = {
   status: string; total: string; paid_total: string;
 };
 type Contact = { id: string; name: string; type: string };
-type Product = { id: string; name: string; sale_price: string };
+type Product = {
+  id: string; name: string; sale_price: string;
+  purchase_price: string;   // modal per botol
+  pack_size: number;        // isi per dus
+};
+/** Harga terakhir yang pernah dipakai untuk customer ini (per produk & satuan). */
+type LastPrice = { product_id: string; unit: string; unit_price: string; date: string };
 
 type Line = {
   product_id: string; description: string;
-  quantity: string; unit_price: string; discount: string; tax_rate: string;
+  quantity: string; unit: "dus" | "botol";
+  unit_price: string; discount: string; tax_rate: string;
 };
 
 const STATUS: Record<string, string> = {
@@ -28,8 +35,10 @@ const STATUS: Record<string, string> = {
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+// Default "botol": kalau user lupa mengganti satuan, jumlahnya kurang — jauh lebih
+// aman daripada default "dus" yang melebihkan stok sampai 48x.
 const baris = (): Line => ({
-  product_id: "", description: "", quantity: "1",
+  product_id: "", description: "", quantity: "1", unit: "botol",
   unit_price: "0", discount: "0", tax_rate: "0",
 });
 
@@ -50,6 +59,7 @@ export default function PenjualanPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [contactId, setContactId] = useState("");
+  const [lastPrices, setLastPrices] = useState<LastPrice[]>([]);
   const [date, setDate] = useState(today());
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<Line[]>([baris()]);
@@ -126,22 +136,69 @@ export default function PenjualanPage() {
   function bukaForm() {
     setFormError(null);
     setContactId(""); setDate(today()); setNotes(""); setLines([baris()]);
+    setLastPrices([]);
     setOpen(true);
     api<Contact[]>("/contacts?type=customer").then(setContacts).catch(() => {});
-    api<Product[]>("/products").then(setProducts).catch(() => {});
+    api<Product[]>("/products?limit=200").then(setProducts).catch(() => {});
+  }
+
+  /** Ambil riwayat harga begitu pelanggan dipilih. */
+  function pilihPelanggan(cid: string) {
+    setContactId(cid);
+    setLastPrices([]);
+    if (!cid) return;
+    api<LastPrice[]>(`/invoices/last-prices?contact_id=${cid}`)
+      .then(setLastPrices).catch(() => {});
   }
 
   function setLine(i: number, patch: Partial<Line>) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
+
+  /** Harga jual tidak ada di master produk (beda tiap customer), jadi saran
+   *  harga diambil dari transaksi TERAKHIR customer ini untuk produk & satuan
+   *  yang sama. Kalau belum pernah, harga dibiarkan kosong untuk diisi sales. */
+  function sarankanHarga(pid: string, unit: string): string | null {
+    const hit = lastPrices.find((x) => x.product_id === pid && x.unit === unit);
+    return hit ? hit.unit_price : null;
+  }
+
   function pilihProduk(i: number, pid: string) {
     const p = products.find((x) => x.id === pid);
+    const unit = lines[i].unit;
     setLine(i, {
       product_id: pid,
       description: p?.name ?? "",
-      unit_price: p ? p.sale_price : lines[i].unit_price,
+      unit_price: sarankanHarga(pid, unit) ?? "0",
     });
   }
+
+  function pilihSatuan(i: number, unit: "dus" | "botol") {
+    const l = lines[i];
+    // Harga mengikuti satuan: saran harga per dus ≠ 24x harga per botol.
+    const saran = l.product_id ? sarankanHarga(l.product_id, unit) : null;
+    setLine(i, { unit, ...(saran !== null ? { unit_price: saran } : {}) });
+  }
+
+  function isiDus(l: Line): number | null {
+    const p = products.find((x) => x.id === l.product_id);
+    return p?.pack_size ?? null;
+  }
+
+  /** Modal per satuan baris, untuk memperingatkan penjualan di bawah modal. */
+  function modalBaris(l: Line): number | null {
+    const p = products.find((x) => x.id === l.product_id);
+    if (!p) return null;
+    const perBotol = Number(p.purchase_price || 0);
+    if (!perBotol) return null;
+    return l.unit === "dus" ? perBotol * (p.pack_size || 1) : perBotol;
+  }
+
+  const dibawahModal = lines.filter((l) => {
+    const modal = modalBaris(l);
+    const harga = Number(l.unit_price || 0);
+    return modal !== null && harga > 0 && harga < modal;
+  });
 
   const total = lines.reduce((s, l) => s + lineTotal(l), 0);
 
@@ -151,6 +208,14 @@ export default function PenjualanPage() {
     if (!contactId) return setFormError("Pilih pelanggan dulu.");
     const valid = lines.filter((l) => Number(l.quantity) > 0);
     if (valid.length === 0) return setFormError("Tambahkan minimal satu baris.");
+    // Harga bebas per customer, tapi jual di bawah modal harus disadari dulu.
+    if (dibawahModal.length > 0) {
+      const daftar = dibawahModal
+        .map((l) => `${l.description || "baris"} (${rupiah(modalBaris(l) ?? 0)}/${l.unit})`)
+        .join(", ");
+      if (!window.confirm(
+        `Ada harga di bawah modal: ${daftar}.\n\nTetap terbitkan faktur?`)) return;
+    }
     setSaving(true);
     try {
       const res = await api<{ stock_warnings?: {product:string;kurang:string;tersedia:string}[] }>("/invoices", {
@@ -162,7 +227,9 @@ export default function PenjualanPage() {
           lines: valid.map((l) => ({
             product_id: l.product_id || null,
             description: l.description || null,
+            // quantity & unit_price mengikuti satuan yang dipilih di baris ini.
             quantity: l.quantity,
+            unit: l.unit,
             unit_price: l.unit_price || "0",
             discount: l.discount || "0",
             tax_rate: l.tax_rate || "0",
@@ -279,7 +346,7 @@ export default function PenjualanPage() {
         <form onSubmit={simpan} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Pelanggan">
-              <Select value={contactId} onChange={(e) => setContactId(e.target.value)} required>
+              <Select value={contactId} onChange={(e) => pilihPelanggan(e.target.value)} required>
                 <option value="">— pilih pelanggan —</option>
                 {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
@@ -302,7 +369,8 @@ export default function PenjualanPage() {
                 <thead><tr className="border-b border-line bg-surface-sunken text-left text-caption text-ink-muted">
                   <th className="px-2 py-2 font-medium">Produk / Deskripsi</th>
                   <th className="px-2 py-2 text-right font-medium">Qty</th>
-                  <th className="px-2 py-2 text-right font-medium">Harga</th>
+                  <th className="px-2 py-2 font-medium">Satuan</th>
+                  <th className="px-2 py-2 text-right font-medium">Harga / Satuan</th>
                   <th className="px-2 py-2 text-right font-medium">Diskon</th>
                   <th className="px-2 py-2 text-right font-medium">Pajak %</th>
                   <th className="px-2 py-2 text-right font-medium">Subtotal</th>
@@ -323,7 +391,31 @@ export default function PenjualanPage() {
                         )}
                       </td>
                       <td className="px-2 py-1.5 w-20"><NumCell value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
-                      <td className="px-2 py-1.5 w-28"><NumCell value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} /></td>
+                      <td className="px-2 py-1.5 w-24">
+                        <Select value={l.unit}
+                          onChange={(e) => pilihSatuan(i, e.target.value as "dus" | "botol")}>
+                          <option value="botol">botol</option>
+                          <option value="dus">dus</option>
+                        </Select>
+                        {l.unit === "dus" && isiDus(l) && (
+                          <span className="mt-0.5 block text-center text-caption text-ink-subtle">
+                            {isiDus(l)} btl
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 w-28">
+                        <NumCell value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} />
+                        {(() => {
+                          const modal = modalBaris(l);
+                          const harga = Number(l.unit_price || 0);
+                          if (modal === null || harga <= 0 || harga >= modal) return null;
+                          return (
+                            <span className="mt-0.5 block text-right text-caption text-danger">
+                              di bawah modal {rupiah(modal)}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="px-2 py-1.5 w-24"><NumCell value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value })} /></td>
                       <td className="px-2 py-1.5 w-16"><NumCell value={l.tax_rate} onChange={(e) => setLine(i, { tax_rate: e.target.value })} /></td>
                       <td className="px-2 py-1.5 text-right tabular-nums text-ink-muted">{rupiah(lineTotal(l))}</td>

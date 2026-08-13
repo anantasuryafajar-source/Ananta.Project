@@ -12,12 +12,13 @@ import { Input } from "@/components/ui/input";
 
 type PO = { id: string; number: string; date: string; status: string; total: string; freight_total: string; bill_id: string | null };
 type Contact = { id: string; name: string };
-type Product = { id: string; name: string; purchase_price: string };
+type Product = { id: string; name: string; purchase_price: string; pack_purchase_price: string; pack_size: number };
 type Warehouse = { id: string; name: string };
-type Line = { product_id: string; description: string; quantity: string; unit_price: string; discount: string; tax_rate: string };
+type Line = { product_id: string; description: string; quantity: string; unit: "dus" | "botol"; unit_price: string; discount: string; tax_rate: string };
 
 const today = () => new Date().toISOString().slice(0, 10);
-const baris = (): Line => ({ product_id: "", description: "", quantity: "1", unit_price: "0", discount: "0", tax_rate: "0" });
+// Pengadaan dari supplier umumnya per dus.
+const baris = (): Line => ({ product_id: "", description: "", quantity: "1", unit: "dus", unit_price: "0", discount: "0", tax_rate: "0" });
 const STATUS: Record<string, string> = { draft: "text-ink-subtle", received: "text-success", cancelled: "text-danger" };
 
 function lineTotal(l: Line) {
@@ -55,9 +56,19 @@ export default function PurchaseOrdersPage() {
     api<Warehouse[]>("/warehouses").then((w) => { setWarehouses(w); if (w[0]) setWhId(w[0].id); }).catch(() => {});
   }
   function setLine(i: number, patch: Partial<Line>) { setLines((ls) => ls.map((l, idx) => idx === i ? { ...l, ...patch } : l)); }
+  /** Modal acuan mengikuti satuan: per dus atau per botol. */
+  function satuanHarga(pid: string, unit: string): string {
+    const p = products.find((x) => x.id === pid);
+    if (!p) return "0";
+    return unit === "dus" ? p.pack_purchase_price : p.purchase_price;
+  }
   function pilihProduk(i: number, pid: string) {
     const p = products.find((x) => x.id === pid);
-    setLine(i, { product_id: pid, description: p?.name ?? "", unit_price: p ? p.purchase_price : lines[i].unit_price });
+    setLine(i, { product_id: pid, description: p?.name ?? "", unit_price: satuanHarga(pid, lines[i].unit) });
+  }
+  function pilihSatuan(i: number, unit: "dus" | "botol") {
+    const pid = lines[i].product_id;
+    setLine(i, { unit, ...(pid ? { unit_price: satuanHarga(pid, unit) } : {}) });
   }
   const total = lines.reduce((s, l) => s + lineTotal(l), 0);
 
@@ -74,7 +85,7 @@ export default function PurchaseOrdersPage() {
           contact_id: contactId, date, warehouse_id: whId || null,
           freight_total: freight || "0", freight_supplier_share: freightSup || "0",
           notes: notes || null,
-          lines: valid.map((l) => ({ product_id: l.product_id || null, description: l.description || null, quantity: l.quantity, unit_price: l.unit_price || "0", discount: l.discount || "0", tax_rate: l.tax_rate || "0" })),
+          lines: valid.map((l) => ({ product_id: l.product_id || null, description: l.description || null, quantity: l.quantity, unit: l.unit, unit_price: l.unit_price || "0", discount: l.discount || "0", tax_rate: l.tax_rate || "0" })),
         }),
       });
       setOpen(false); muat();
@@ -167,7 +178,7 @@ export default function PurchaseOrdersPage() {
             </Field>
           </div>
 
-          <LineTable lines={lines} setLines={setLines} products={products} pilihProduk={pilihProduk} setLine={setLine} priceLabel="Harga Beli" />
+          <LineTable lines={lines} setLines={setLines} products={products} pilihProduk={pilihProduk} setLine={setLine} pilihSatuan={pilihSatuan} priceLabel="Modal / Satuan" />
 
           <div className="grid grid-cols-3 gap-4">
             <Field label="Ongkir total (Rp)"><Input type="number" min={0} value={freight} onChange={(e) => setFreight(e.target.value)} /></Field>
@@ -190,10 +201,11 @@ export default function PurchaseOrdersPage() {
   );
 }
 
-function LineTable({ lines, setLines, products, pilihProduk, setLine, priceLabel }: {
+function LineTable({ lines, setLines, products, pilihProduk, setLine, pilihSatuan, priceLabel }: {
   lines: Line[]; setLines: React.Dispatch<React.SetStateAction<Line[]>>;
   products: Product[]; pilihProduk: (i: number, pid: string) => void;
-  setLine: (i: number, patch: Partial<Line>) => void; priceLabel: string;
+  setLine: (i: number, patch: Partial<Line>) => void;
+  pilihSatuan: (i: number, unit: "dus" | "botol") => void; priceLabel: string;
 }) {
   return (
     <div>
@@ -206,6 +218,7 @@ function LineTable({ lines, setLines, products, pilihProduk, setLine, priceLabel
           <thead><tr className="border-b border-line bg-surface-sunken text-left text-caption text-ink-muted">
             <th className="px-2 py-2 font-medium">Produk</th>
             <th className="px-2 py-2 text-right font-medium">Qty</th>
+            <th className="px-2 py-2 font-medium">Satuan</th>
             <th className="px-2 py-2 text-right font-medium">{priceLabel}</th>
             <th className="px-2 py-2 text-right font-medium">Diskon</th>
             <th className="px-2 py-2 text-right font-medium">Pajak %</th>
@@ -222,6 +235,12 @@ function LineTable({ lines, setLines, products, pilihProduk, setLine, priceLabel
                   {!l.product_id && <input value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Deskripsi" className="w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-2 py-1 text-sm text-ink focus:border-primary focus:bg-surface focus:outline-none" />}
                 </td>
                 <td className="w-20 px-2 py-1.5"><NumCell value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
+                <td className="w-24 px-2 py-1.5">
+                  <Select value={l.unit} onChange={(e) => pilihSatuan(i, e.target.value as "dus" | "botol")}>
+                    <option value="dus">dus</option>
+                    <option value="botol">botol</option>
+                  </Select>
+                </td>
                 <td className="w-28 px-2 py-1.5"><NumCell value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} /></td>
                 <td className="w-24 px-2 py-1.5"><NumCell value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value })} /></td>
                 <td className="w-16 px-2 py-1.5"><NumCell value={l.tax_rate} onChange={(e) => setLine(i, { tax_rate: e.target.value })} /></td>

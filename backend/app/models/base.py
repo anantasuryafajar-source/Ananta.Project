@@ -24,6 +24,15 @@ class Base(DeclarativeBase):
 # Tipe uang seragam: Numeric(18,2). JANGAN pakai float untuk nilai uang.
 Money = Numeric(18, 2)
 Qty = Numeric(18, 4)
+
+# Biaya PER SATUAN (avg_cost stok, unit_cost mutasi): 4 desimal, bukan 2.
+# Alasannya konversi dus->botol hampir selalu tidak bulat (bagi 12/24/48), mis.
+# Rp 3.700.000 / 12 = 308.333,3333 per botol. Dengan 2 desimal, `qty * avg_cost`
+# di laporan valuasi stok melenceng dari saldo akun Persediaan di jurnal; dengan
+# 4 desimal keduanya cocok sampai sen. Nilai UANG yang masuk jurnal tetap 2
+# desimal — ini murni presisi biaya satuan, bukan pelonggaran aturan uang.
+UnitCost = Numeric(18, 4)
+
 ZERO = Decimal("0.00")
 
 

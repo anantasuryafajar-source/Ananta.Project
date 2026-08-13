@@ -95,10 +95,16 @@ async def ar_limit(db: AsyncSession, company_id: str) -> dict:
 async def commission(db: AsyncSession, company_id: str, start: date, end: date,
                      rate: float = 0.05) -> dict:
     """Komisi berbasis margin per SKU (modal dari purchase_price, seperti sheet KOMISI).
-    commission = (harga_jual - modal) * qty * rate."""
+    commission = (harga_jual - modal) * qty * rate.
+
+    SATUAN: omzet dihitung dari `qty_input` x `unit_price` (keduanya dalam satuan
+    yang dipilih user), sedangkan modal dari `quantity` (botol) x `purchase_price`
+    (per botol). Mencampur keduanya membuat angka salah 12-48x.
+    """
     rows = (await db.execute(
         select(Product.sku, Product.name, Product.purchase_price,
-               InvoiceLine.quantity, InvoiceLine.unit_price, InvoiceLine.discount)
+               InvoiceLine.quantity, InvoiceLine.qty_input,
+               InvoiceLine.unit_price, InvoiceLine.discount)
         .join(InvoiceLine, InvoiceLine.product_id == Product.id)
         .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
         .where(Invoice.company_id == company_id,
@@ -107,14 +113,16 @@ async def commission(db: AsyncSession, company_id: str, start: date, end: date,
     )).all()
 
     agg: dict[str, dict] = {}
-    for sku, name, modal, qty, price, disc in rows:
-        q = Decimal(str(qty or 0))
-        revenue = q * Decimal(str(price or 0)) - Decimal(str(disc or 0))
-        cost = q * Decimal(str(modal or 0))
+    for sku, name, modal, qty_base, qty_input, price, disc in rows:
+        q_base = Decimal(str(qty_base or 0))
+        q_in = Decimal(str(qty_input or 0))
+        revenue = q_in * Decimal(str(price or 0)) - Decimal(str(disc or 0))
+        cost = q_base * Decimal(str(modal or 0))
         margin = revenue - cost
         a = agg.setdefault(sku, {"name": name, "qty": Decimal("0"),
                                  "revenue": Decimal("0"), "margin": Decimal("0")})
-        a["qty"] += q
+        # Kuantitas dilaporkan dalam BOTOL agar bisa dijumlah antar-satuan.
+        a["qty"] += q_base
         a["revenue"] += revenue
         a["margin"] += margin
 
@@ -173,11 +181,16 @@ async def quarterly_recap(db: AsyncSession, company_id: str) -> dict:
 # ------------------------------------------------------------ GPM (margin) per SKU & customer
 async def gpm(db: AsyncSession, company_id: str, start: date, end: date) -> dict:
     """Gross Profit Margin per SKU dan per customer (mirip sheet GPMCUST).
-    Modal dari purchase_price. GPM% = margin / omzet * 100."""
+    Modal dari purchase_price. GPM% = margin / omzet * 100.
+
+    SATUAN: sama seperti commission() — omzet dari qty_input x unit_price,
+    modal dari quantity (botol) x purchase_price (per botol).
+    """
     from ..models import Contact
     rows = (await db.execute(
         select(Contact.name, Product.sku, Product.name, Product.purchase_price,
-               InvoiceLine.quantity, InvoiceLine.unit_price, InvoiceLine.discount)
+               InvoiceLine.quantity, InvoiceLine.qty_input,
+               InvoiceLine.unit_price, InvoiceLine.discount)
         .join(InvoiceLine, InvoiceLine.product_id == Product.id)
         .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
         .join(Contact, Contact.id == Invoice.contact_id, isouter=True)
@@ -188,10 +201,10 @@ async def gpm(db: AsyncSession, company_id: str, start: date, end: date) -> dict
 
     by_sku: dict[str, dict] = {}
     by_cust: dict[str, dict] = {}
-    for cust, sku, pname, modal, qty, price, disc in rows:
-        q = Decimal(str(qty or 0))
-        revenue = q * Decimal(str(price or 0)) - Decimal(str(disc or 0))
-        cost = q * Decimal(str(modal or 0))
+    for cust, sku, pname, modal, qty_base, qty_input, price, disc in rows:
+        revenue = (Decimal(str(qty_input or 0)) * Decimal(str(price or 0))
+                   - Decimal(str(disc or 0)))
+        cost = Decimal(str(qty_base or 0)) * Decimal(str(modal or 0))
         margin = revenue - cost
         s = by_sku.setdefault(sku, {"name": pname, "revenue": Decimal("0"), "margin": Decimal("0")})
         s["revenue"] += revenue

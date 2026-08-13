@@ -17,6 +17,7 @@ from ..models import (
 from .numbering import next_number
 from .purchase_service import create_and_post_bill, compute_line
 from .invoice_service import create_and_post_invoice
+from .units import BASE_UNIT, factor_for, to_base, try_normalize_unit
 
 CENT = Decimal("0.01")
 
@@ -26,26 +27,38 @@ def _q(v) -> Decimal:
 
 
 async def _prep_lines(db, lines_in: list[dict]):
-    """Hitung total per baris + siapkan objek line (dipakai PO & SO)."""
+    """Hitung total per baris + siapkan objek line (dipakai PO & SO).
+
+    Satuan diperlakukan sama seperti di faktur/tagihan: uang dari satuan yang
+    dipilih, `quantity` disimpan dalam botol, faktor di-snapshot.
+    """
     subtotal = Decimal("0")
     tax_total = Decimal("0")
     prepared = []
     for raw in lines_in:
-        qty = Decimal(str(raw["quantity"]))
+        qty_input = Decimal(str(raw["quantity"]))
         price = Decimal(str(raw["unit_price"]))
         disc = Decimal(str(raw.get("discount", 0)))
         rate = Decimal(str(raw.get("tax_rate", 0)))
-        base, tax = compute_line(qty, price, disc, rate)
+        base, tax = compute_line(qty_input, price, disc, rate)
         subtotal += base
         tax_total += tax
-        desc = raw.get("description")
-        if not desc and raw.get("product_id"):
-            desc = (await db.execute(
-                select(Product.name).where(Product.id == raw["product_id"])
+
+        product = None
+        if raw.get("product_id"):
+            product = (await db.execute(
+                select(Product).where(Product.id == raw["product_id"])
             )).scalar_one_or_none()
+        desc = raw.get("description") or (product.name if product else "")
+
+        unit = try_normalize_unit(raw.get("unit")) or BASE_UNIT
+        factor = factor_for(unit, product.pack_size if product else 1)
+
         prepared.append({
             "product_id": raw.get("product_id"), "description": desc or "",
-            "quantity": qty, "price": price, "discount": disc,
+            "quantity": to_base(qty_input, factor), "qty_input": qty_input,
+            "unit": unit, "unit_factor": factor,
+            "price": price, "discount": disc,
             "tax_rate": rate, "line_total": _q(base + tax),
         })
     return _q(subtotal), _q(tax_total), prepared
@@ -68,7 +81,9 @@ async def create_purchase_order(
         notes=notes, created_by=user_id,
         lines=[POLine(
             product_id=p["product_id"], description=p["description"],
-            quantity=p["quantity"], unit_cost=p["price"], discount=p["discount"],
+            quantity=p["quantity"], qty_input=p["qty_input"], unit=p["unit"],
+            unit_factor=p["unit_factor"],
+            unit_cost=p["price"], discount=p["discount"],
             tax_rate=p["tax_rate"], line_total=p["line_total"],
         ) for p in prepared],
     )
@@ -85,9 +100,12 @@ async def receive_purchase_order(db, *, company_id, user_id, po_id) -> PurchaseO
     )).scalar_one()
     if po.status in ("received", "cancelled"):
         raise ValueError(f"PO sudah {po.status}, tidak bisa diterima lagi.")
+    # PENTING: kirim jumlah SEPERTI DIKETIK (`qty_input`) + satuannya, bukan
+    # `quantity` yang sudah dalam botol — kalau tidak, create_and_post_bill akan
+    # mengalikan faktor untuk KEDUA kalinya (1 dus jadi 144 botol).
     lines_in = [{
         "product_id": l.product_id, "description": l.description,
-        "quantity": l.quantity, "unit_cost": l.unit_cost,
+        "quantity": l.qty_input, "unit": l.unit, "unit_cost": l.unit_cost,
         "discount": l.discount, "tax_rate": l.tax_rate,
     } for l in po.lines]
     bill = await create_and_post_bill(
@@ -116,7 +134,9 @@ async def create_sales_order(
         courier_name=courier_name, notes=notes, created_by=user_id,
         lines=[SOLine(
             product_id=p["product_id"], description=p["description"],
-            quantity=p["quantity"], unit_price=p["price"], discount=p["discount"],
+            quantity=p["quantity"], qty_input=p["qty_input"], unit=p["unit"],
+            unit_factor=p["unit_factor"],
+            unit_price=p["price"], discount=p["discount"],
             tax_rate=p["tax_rate"], line_total=p["line_total"],
         ) for p in prepared],
     )
@@ -133,9 +153,10 @@ async def invoice_sales_order(db, *, company_id, user_id, so_id) -> SalesOrder:
     )).scalar_one()
     if so.status in ("invoiced", "cancelled"):
         raise ValueError(f"SO sudah {so.status}.")
+    # Sama seperti PO -> Bill: kirim `qty_input` + satuan, jangan `quantity`.
     lines_in = [{
         "product_id": l.product_id, "description": l.description,
-        "quantity": l.quantity, "unit_price": l.unit_price,
+        "quantity": l.qty_input, "unit": l.unit, "unit_price": l.unit_price,
         "discount": l.discount, "tax_rate": l.tax_rate,
     } for l in so.lines]
     invoice = await create_and_post_invoice(

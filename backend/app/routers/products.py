@@ -5,6 +5,8 @@ from ..core.database import get_db
 from ..models import Product, User
 from ..deps import current_user, require_roles
 from ..schemas.product import ProductIn, ProductOut
+from ..services.product_service import create_product as create_product_svc
+from ..services.units import base_price_from_pack, clean_pack_size
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -27,11 +29,20 @@ async def create_product(
     user: User = Depends(require_roles("warehouse", "finance", "sales")),
     db: AsyncSession = Depends(get_db),
 ):
-    product = Product(company_id=user.company_id, **body.model_dump())
-    db.add(product)
-    await db.commit()
-    await db.refresh(product)
-    return product
+    # Lewat service supaya SKU otomatis & konversi modal dus->botol seragam
+    # dengan jalur bot Telegram.
+    return await create_product_svc(
+        db,
+        company_id=user.company_id,
+        name=body.name,
+        sku=body.sku,
+        kind=body.kind,
+        unit=body.unit,
+        pack_unit=body.pack_unit,
+        pack_size=body.pack_size,
+        pack_purchase_price=body.pack_purchase_price,
+        min_stock=body.min_stock,
+    )
 
 
 # ============================= EDIT & HAPUS =============================
@@ -51,8 +62,24 @@ async def update_product(
     )).scalar_one_or_none()
     if product is None:
         raise HTTPException(status_code=404, detail="Produk tidak ditemukan.")
-    for k, v in body.model_dump().items():
+
+    data = body.model_dump()
+    # SKU tidak diketik user: kosong berarti "pertahankan yang sudah ada".
+    new_sku = data.pop("sku", None)
+    if new_sku:
+        product.sku = new_sku
+
+    size = clean_pack_size(data.pop("pack_size"))
+    pack_modal = data.pop("pack_purchase_price")
+    for k, v in data.items():
         setattr(product, k, v)
+
+    # Mengubah isi/dus AMAN untuk stok: saldo tersimpan dalam botol dan setiap
+    # baris transaksi menyimpan faktornya sendiri, jadi riwayat tidak bergeser.
+    product.pack_size = size
+    product.pack_purchase_price = pack_modal
+    product.purchase_price = base_price_from_pack(pack_modal, size)
+
     await db.commit()
     await db.refresh(product)
     return product

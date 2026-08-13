@@ -210,7 +210,14 @@ def parse_payment_block(block: str) -> dict:
 
 
 # ===================== PENGADAAN (faktur pembelian multi-baris) =====================
-_ITEM_RE = re.compile(r"^\s*(.+?)\s*[xX*]\s*([\d.,]+)\s*@\s*([\d.,]+)\s*$")
+# 'SKU x QTY SATUAN @ HARGA' — satuan WAJIB (dus / botol dan aliasnya).
+# Bot tidak boleh menebak satuan: salah tebak membuat stok salah 12-48x dan
+# langsung masuk jurnal. Lihat services/units.py.
+_ITEM_RE = re.compile(
+    r"^\s*(.+?)\s*[xX*]\s*([\d.,]+)\s*([A-Za-z]+)\s*@\s*([\d.,]+)\s*$"
+)
+# Bentuk lama tanpa satuan — dikenali khusus supaya pesan errornya jelas.
+_ITEM_NO_UNIT_RE = re.compile(r"^\s*(.+?)\s*[xX*]\s*([\d.,]+)\s*@\s*([\d.,]+)\s*$")
 
 
 def parse_price_nonneg(text: str):
@@ -225,17 +232,34 @@ def parse_price_nonneg(text: str):
     return val if val >= 0 else None
 
 
+class ItemUnitMissing(ValueError):
+    """Baris item ditulis tanpa satuan — harus ditolak, tidak boleh ditebak."""
+
+
 def parse_item_line(line: str):
-    """'SKU x QTY @ HARGA' -> (sku, qty>0, harga>=0) atau None."""
+    """'SKU x QTY SATUAN @ HARGA' -> (sku, qty>0, unit, harga>=0) atau None.
+
+    Satuan wajib ditulis ('dus' atau 'botol'). Bila baris memakai bentuk lama
+    tanpa satuan, fungsi ini melempar ItemUnitMissing supaya pemanggil bisa
+    memberi pesan yang jelas — bukan menebak dan salah 12-48x.
+    """
+    from ..services.units import UnitError, normalize_unit
+
     m = _ITEM_RE.match(line or "")
     if not m:
+        if _ITEM_NO_UNIT_RE.match(line or ""):
+            raise ItemUnitMissing(line or "")
         return None
     sku = m.group(1).strip()[:40]
     qty = parse_amount(m.group(2))          # > 0
-    price = parse_price_nonneg(m.group(3))  # >= 0
+    try:
+        unit = normalize_unit(m.group(3))
+    except UnitError:
+        return None
+    price = parse_price_nonneg(m.group(4))  # >= 0
     if not sku or qty is None or price is None:
         return None
-    return (sku, qty, price)
+    return (sku, qty, unit, price)
 
 
 def parse_pengadaan_block(block: str) -> dict:
@@ -274,4 +298,34 @@ def parse_penjualan_block(block: str) -> dict:
             out["warehouse"] = val[:120]
         elif key in ("item", "barang", "produk"):
             out["items"].append(val)
+    return out
+
+
+# ===================== PRODUK (/tambah_produk) =====================
+def parse_product_block(block: str) -> dict:
+    """Parse blok multi-baris 'Kunci: Nilai' jadi dict field produk.
+
+    Toleran: tanda '-' di depan, spasi bebas, kunci Indonesia/Inggris.
+
+    Catatan: kunci "Harga"/"Modal" dibaca sebagai **modal per dus**. Dulu nilai
+    ini salah tersimpan ke harga jual (`sale_price`) sehingga modal produk selalu
+    kosong di web — itu bug yang diperbaiki bersama perubahan satuan ini.
+    """
+    out: dict = {}
+    for raw in block.splitlines():
+        line = raw.strip().lstrip("-").strip()
+        if not line or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key == "sku":
+            out["sku"] = val[:40]
+        elif key in ("nama", "name"):
+            out["name"] = val[:200]
+        elif key in ("isi per dus", "isi", "isi dus", "pack", "pack size"):
+            out["pack_raw"] = val
+        elif key in ("harga", "modal", "modal per dus", "harga modal",
+                     "harga per dus", "price"):
+            out["price_raw"] = val
     return out

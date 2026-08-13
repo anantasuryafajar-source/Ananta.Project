@@ -13,7 +13,8 @@ type Summary = {
   cash_bank: string; receivable_total: string; payable_total: string; stock_value: string;
   trend: { month: string; omzet: string }[];
   alerts: {
-    low_stock: { sku: string; name: string; quantity: string; min_stock: string }[];
+    low_stock: { sku: string; name: string; quantity: string; min_stock: string;
+                 qty_display: string; min_display: string }[];
     overdue_invoices: { number: string; due_date: string; customer: string; outstanding: string; days_late: number }[];
     over_limit: { customer: string; outstanding: string; credit_limit: string }[];
   };
@@ -98,7 +99,7 @@ export default function DashboardPage() {
                   {d.alerts.low_stock.map((s) => (
                     <AlertRow key={s.sku} icon={<PackageSearch size={14} />}
                       main={s.name}
-                      sub={`stok ${Number(s.quantity)} < minimum ${Number(s.min_stock)}`} />
+                      sub={`stok ${s.qty_display} < minimum ${s.min_display}`} />
                   ))}
                   {d.alerts.over_limit.map((c) => (
                     <AlertRow key={c.customer} icon={<AlertTriangle size={14} />}

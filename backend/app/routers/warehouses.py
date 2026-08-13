@@ -8,6 +8,7 @@ from ..schemas.distribusi import (
     WarehouseIn, WarehouseOut, StockRow, TransferIn, TransferOut,
 )
 from ..services.transfer_service import transfer_stock, TransferError
+from ..services.units import format_qty
 
 router = APIRouter(prefix="/warehouses", tags=["warehouses"])
 
@@ -50,7 +51,9 @@ async def warehouse_stock(
     rows = (await db.execute(stmt)).all()
     return [
         StockRow(product_id=p.id, sku=p.sku, name=p.name,
-                 warehouse_id=warehouse_id, quantity=lvl.quantity, avg_cost=lvl.avg_cost)
+                 warehouse_id=warehouse_id, quantity=lvl.quantity,
+                 avg_cost=lvl.avg_cost, pack_size=p.pack_size,
+                 qty_display=format_qty(lvl.quantity, p.pack_size))
         for lvl, p in rows
     ]
 

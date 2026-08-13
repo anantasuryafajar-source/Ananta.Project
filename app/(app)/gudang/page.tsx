@@ -11,9 +11,9 @@ import { Field, Select, NumCell } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 
 type Warehouse = { id: string; code: string; name: string; is_default: boolean };
-type StockRow = { product_id: string; sku: string; name: string; quantity: string; avg_cost: string };
+type StockRow = { product_id: string; sku: string; name: string; quantity: string; qty_display: string; avg_cost: string; pack_size: number };
 type Product = { id: string; name: string };
-type Line = { product_id: string; quantity: string };
+type Line = { product_id: string; quantity: string; unit: "dus" | "botol" };
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -32,7 +32,7 @@ export default function GudangPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [fromWh, setFromWh] = useState("");
   const [toWh, setToWh] = useState("");
-  const [tfLines, setTfLines] = useState<Line[]>([{ product_id: "", quantity: "1" }]);
+  const [tfLines, setTfLines] = useState<Line[]>([{ product_id: "", quantity: "1", unit: "botol" }]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -56,7 +56,7 @@ export default function GudangPage() {
   }
 
   function bukaTransfer() {
-    setFormError(null); setFromWh(selected || ""); setToWh(""); setTfLines([{ product_id: "", quantity: "1" }]);
+    setFormError(null); setFromWh(selected || ""); setToWh(""); setTfLines([{ product_id: "", quantity: "1", unit: "botol" }]);
     setOpenTf(true);
     api<Product[]>("/products").then(setProducts).catch(() => {});
   }
@@ -123,7 +123,7 @@ export default function GudangPage() {
                   <tr key={s.product_id} className="border-b border-line last:border-0 hover:bg-surface-sunken">
                     <td className="px-4 py-3 text-ink-muted">{s.sku}</td>
                     <td className="px-4 py-3 text-ink">{s.name}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink">{Number(s.quantity)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-ink">{s.qty_display}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{rupiah(s.avg_cost)}</td>
                   </tr>
                 ))}
@@ -169,7 +169,7 @@ export default function GudangPage() {
           <div>
             <div className="mb-1 flex items-center justify-between">
               <span className="text-sm font-medium text-ink">Barang</span>
-              <Button type="button" variant="secondary" onClick={() => setTfLines((l) => [...l, { product_id: "", quantity: "1" }])}>
+              <Button type="button" variant="secondary" onClick={() => setTfLines((l) => [...l, { product_id: "", quantity: "1", unit: "botol" }])}>
                 <Plus size={14} /> Baris
               </Button>
             </div>
@@ -186,6 +186,13 @@ export default function GudangPage() {
                       </td>
                       <td className="w-24 px-2 py-1.5">
                         <NumCell value={l.quantity} onChange={(e) => setTfLines((ls) => ls.map((x, idx) => idx === i ? { ...x, quantity: e.target.value } : x))} />
+                      </td>
+                      <td className="w-24 px-2 py-1.5">
+                        <Select value={l.unit}
+                          onChange={(e) => setTfLines((ls) => ls.map((x, idx) => idx === i ? { ...x, unit: e.target.value as "dus" | "botol" } : x))}>
+                          <option value="botol">botol</option>
+                          <option value="dus">dus</option>
+                        </Select>
                       </td>
                       <td className="w-8 px-1 text-center">
                         {tfLines.length > 1 && (

@@ -1,5 +1,5 @@
 from datetime import date
-from sqlalchemy import String, ForeignKey, Date, Text
+from sqlalchemy import String, ForeignKey, Date, Text, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, PKMixin, TimestampMixin, Money, Qty
 
@@ -32,12 +32,16 @@ class PurchaseOrder(Base, PKMixin, TimestampMixin):
 
 
 class POLine(Base, PKMixin):
+    """Baris PO. Lihat catatan satuan di models/invoice.py."""
     __tablename__ = "purchase_order_lines"
     order_id: Mapped[str] = mapped_column(ForeignKey("purchase_orders.id"), index=True)
     product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id"), nullable=True)
     description: Mapped[str] = mapped_column(String(255))
-    quantity: Mapped[object] = mapped_column(Qty, default=1)
-    unit_cost: Mapped[object] = mapped_column(Money, default=0)
+    quantity: Mapped[object] = mapped_column(Qty, default=1)          # botol
+    qty_input: Mapped[object] = mapped_column(Qty, default=1)         # spt diketik
+    unit: Mapped[str] = mapped_column(String(20), default="botol")
+    unit_factor: Mapped[int] = mapped_column(Integer, default=1)
+    unit_cost: Mapped[object] = mapped_column(Money, default=0)       # per `unit`
     discount: Mapped[object] = mapped_column(Money, default=0)
     tax_rate: Mapped[object] = mapped_column(Money, default=0)
     line_total: Mapped[object] = mapped_column(Money, default=0)
@@ -71,12 +75,16 @@ class SalesOrder(Base, PKMixin, TimestampMixin):
 
 
 class SOLine(Base, PKMixin):
+    """Baris SO. Lihat catatan satuan di models/invoice.py."""
     __tablename__ = "sales_order_lines"
     order_id: Mapped[str] = mapped_column(ForeignKey("sales_orders.id"), index=True)
     product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id"), nullable=True)
     description: Mapped[str] = mapped_column(String(255))
-    quantity: Mapped[object] = mapped_column(Qty, default=1)
-    unit_price: Mapped[object] = mapped_column(Money, default=0)
+    quantity: Mapped[object] = mapped_column(Qty, default=1)          # botol
+    qty_input: Mapped[object] = mapped_column(Qty, default=1)         # spt diketik
+    unit: Mapped[str] = mapped_column(String(20), default="botol")
+    unit_factor: Mapped[int] = mapped_column(Integer, default=1)
+    unit_price: Mapped[object] = mapped_column(Money, default=0)      # per `unit`
     discount: Mapped[object] = mapped_column(Money, default=0)
     tax_rate: Mapped[object] = mapped_column(Money, default=0)
     line_total: Mapped[object] = mapped_column(Money, default=0)
