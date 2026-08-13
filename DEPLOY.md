@@ -45,6 +45,13 @@ Supabase HANYA database — FastAPI tetap perlu di-host terpisah. Redis tidak di
 Skema dikelola Alembic. Setiap deploy menjalankan `alembic upgrade head` sendiri,
 jadi perubahan model yang **punya revisi** akan ikut terpasang otomatis.
 
+⚠️ **Jalankan dengan 1 replika saat ada migrasi.** `entrypoint.sh` menjalankan
+`alembic upgrade head` di SETIAP container, jadi beberapa replika akan berebut
+menjalankan revisi yang sama: satu berhasil, sisanya gagal dan mencetak
+`[entrypoint] MIGRASI GAGAL`. DDL Postgres transaksional sehingga tidak ada skema
+setengah jadi, tetapi seed ikut dilewati di container yang gagal. Turunkan replika
+ke 1 sebelum deploy yang memuat revisi baru, naikkan lagi sesudah migrasi selesai.
+
 Menambah/mengubah model WAJIB disertai revisi:
 ```bash
 cd backend
@@ -64,16 +71,19 @@ di database baru yang kolomnya sudah lengkap.
 
 **Langkah:**
 
-1. Backup dulu — cara termudah: GitHub → **Actions** → "Backup Database Harian" →
-   **Run workflow**. Manual dari komputer:
-   ```bash
-   pg_dump "$DATABASE_URL" -Fc -f sebelum-upgrade.dump   # butuh pg_dump v17
-   ```
+1. Siapkan titik pemulihan. Supabase plan berbayar punya backup harian otomatis, tapi
+   umurnya bisa ~24 jam — jangan diandalkan sebagai titik tepat sebelum deploy.
+   - **PITR aktif** (Database → Backups): cukup catat jam & menit (UTC) sebelum push.
+   - **PITR tidak aktif**: ambil dump segar lewat GitHub → **Actions** → "Backup
+     Database Harian" → **Run workflow**, atau manual:
+     ```bash
+     pg_dump "$DATABASE_URL" -Fc -f sebelum-upgrade.dump   # butuh pg_dump v17
+     ```
 2. Deploy kode baru. `entrypoint.sh` otomatis menjalankan `alembic upgrade head`,
    jadi kolom satuan langsung terbentuk saat boot. Kalau mau menjalankan manual
    (Railway → tab Shell):
    ```bash
-   cd backend && alembic upgrade head
+   alembic upgrade head    # di container Railway, /app SUDAH berisi backend/
    ```
 3. Selaraskan master produk dengan daftar resmi client (23 produk). Lihat rencananya
    dulu, baru terapkan:
@@ -104,7 +114,7 @@ database benar-benar tidak diperlukan.
 
 ```bash
 pg_dump "$DATABASE_URL" -Fc -f sebelum-reset.dump
-cd backend
+# di container Railway, /app sudah berisi backend/ — tidak perlu `cd backend`
 alembic downgrade base && alembic upgrade head && python -m app.seed_asf
 ```
 
@@ -126,5 +136,5 @@ benar dan jejak auditnya rapi. Lakukan sebelum input penjualan pertama.
 - `API_BASE` di Vercel sudah benar & sudah redeploy?
 - `CORS_ORIGINS` di backend memuat domain Vercel persis (termasuk https)?
 - Seed `python -m app.seed_asf` sudah dijalankan di backend?
-- Project Supabase tidak ter-pause (free tier pause setelah idle ~7 hari)?
+- Project Supabase tidak ter-pause? (hanya terjadi di free tier, setelah idle ~7 hari)
 - Salah port? Session pooler = 5432. Jangan campur dengan 6543.
