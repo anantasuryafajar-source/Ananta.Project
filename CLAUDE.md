@@ -175,9 +175,22 @@ di `backend/migrations/*.sql`. File-file itu sekarang **historis**; isinya sudah
 `settings.DATABASE_URL` mentah — connection string Supabase membawa scheme `postgres://`
 dan query `sslmode` yang membuat asyncpg gagal connect.
 
-Reset TOTAL (buang semua data termasuk master):
+Ada dua revisi dan keduanya penting:
+- `0001_baseline.py` — `create_all()` dari model, jadi database BARU langsung lengkap.
+- `0002_satuan_dus_botol.py` — mengejar ketertinggalan database yang lahir SEBELUM
+  Alembic dipakai (skemanya dulu dibuat `create_all` di dalam seed, sehingga tidak
+  punya kolom satuan). Karena 0001 sudah membuat kolom itu di database baru, seluruh
+  operasi 0002 **dijaga dengan inspector** supaya jadi no-op alih-alih gagal. Pola
+  ini akan diperlukan lagi setiap kali revisi harus jalan di dua jenis database.
+
+Untuk database yang sudah terisi dan akunnya ingin dipertahankan, **jangan reset**:
+`alembic upgrade head` lalu `python -m app.master_asf --terapkan` (selaraskan master
+23 produk; idempoten, tidak menghapus produk apa pun, tidak menyentuh stok/jurnal).
+
+Reset TOTAL (buang semua data termasuk akun pengguna — password tidak bisa dipulihkan
+karena hash Argon2, tautan bot Telegram harus dibuat ulang):
 `alembic downgrade base && alembic upgrade head && python -m app.seed_asf`.
-Destruktif — pastikan memang diminta, dan `pg_dump` dulu bila datanya bukan dummy.
+Destruktif — pastikan memang diminta, dan `pg_dump` dulu.
 
 ## Struktur frontend
 Route group `app/(app)/` = halaman aplikasi ber-sidebar (`lib/nav.ts` adalah satu-satunya

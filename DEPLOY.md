@@ -52,36 +52,64 @@ alembic revision --autogenerate -m "tambah kolom X"   # cek hasilnya sebelum com
 ```
 Tanpa revisi, tabel/kolom baru TIDAK akan muncul di database yang sudah terisi.
 
-## 5. Reset TOTAL database (hanya bila datanya memang boleh dibuang)
+## 5. Upgrade database yang SUDAH TERISI (tanpa kehilangan akun & riwayat)
 
-⚠️ **Menghapus SEMUA data termasuk master.** Dipakai saat pindah dari data dummy ke
-data asli. Kalau sudah ada transaksi riil, jangan — buat revisi Alembic biasa.
+Ini jalur normal — **tidak perlu reset**. Akun pengguna, role, tautan Telegram,
+riwayat chat AI, faktur, dan jurnal semuanya tetap utuh.
 
-Kenapa reset dan bukan sekadar `upgrade head`: revisi baseline membuat tabel dengan
-`create_all(checkfirst=True)`, yang hanya membuat tabel yang **belum ada** dan tidak
-menambah kolom ke tabel lama. Pada database yang skemanya dibuat cara lama (sebelum
-Alembic), `upgrade head` akan sukses tapi kolom baru tidak terbentuk — lalu API error.
+Revisi `0002_satuan_dus_botol` khusus mengejar ketertinggalan database yang lahir
+sebelum Alembic dipakai: ia menambahkan kolom satuan ke tabel yang sudah ada dan
+melebarkan presisi `avg_cost`. Semua operasinya dijaga (idempoten), jadi aman juga
+di database baru yang kolomnya sudah lengkap.
 
-**Langkah (jalankan dari Railway → tab Shell, atau lokal dengan `DATABASE_URL`
-produksi):**
+**Langkah:**
 
-1. Backup dulu, walau datanya dummy:
+1. Backup dulu — cara termudah: GitHub → **Actions** → "Backup Database Harian" →
+   **Run workflow**. Manual dari komputer:
    ```bash
-   pg_dump "$DATABASE_URL" -Fc -f sebelum-reset.dump
+   pg_dump "$DATABASE_URL" -Fc -f sebelum-upgrade.dump   # butuh pg_dump v17
    ```
-2. Reset + migrasi + seed:
+2. Deploy kode baru. `entrypoint.sh` otomatis menjalankan `alembic upgrade head`,
+   jadi kolom satuan langsung terbentuk saat boot. Kalau mau menjalankan manual
+   (Railway → tab Shell):
    ```bash
-   cd backend
-   alembic downgrade base    # DROP semua tabel
-   alembic upgrade head      # buat ulang dari model
-   python -m app.seed_asf    # CoA + 23 produk + 54 customer + admin
+   cd backend && alembic upgrade head
    ```
-3. Cek `GET /health` -> `{"status":"ok"}`, lalu login dan buka menu Produk:
-   harus ada 23 produk dengan kolom **Isi/Dus** dan **Modal / Dus** terisi.
-4. Isi stok awal (lihat bagian 6) sebelum client mulai membuat faktur.
+3. Selaraskan master produk dengan daftar resmi client (23 produk). Lihat rencananya
+   dulu, baru terapkan:
+   ```bash
+   python -m app.master_asf              # dry-run, hanya menampilkan rencana
+   python -m app.master_asf --terapkan   # simpan
+   ```
+   Skrip ini mengganti nama produk yang berubah, memperbaiki isi/dus & modal per dus,
+   dan menambah produk baru. **Tidak menghapus produk apa pun** dan tidak menyentuh
+   stok maupun jurnal. Aman dijalankan berulang.
+4. Cek `GET /health` -> `{"status":"ok"}`, lalu login dan buka menu Produk: harus ada
+   23 produk dengan kolom **Isi/Dus** dan **Modal / Dus** terisi.
+5. Isi stok awal (lihat bagian 6) sebelum client mulai membuat faktur.
 
-Kalau `downgrade base` gagal karena ada dependensi, jalankan `alembic downgrade
-base` sekali lagi, atau drop schema langsung:
+Apa yang terjadi pada data lama:
+- `products.purchase_price` lama dianggap **modal per DUS** (memang begitu isinya di
+  seed lama) -> dipindah ke `pack_purchase_price`, lalu modal per botol dihitung ulang.
+- Isi per dus diisi 12, kecuali Robinson Vodka (48). Nilai final diperbaiki langkah 3.
+- Baris transaksi lama dianggap satuan **botol** dengan faktor 1, sehingga angka stok
+  dan HPP historis tidak bergeser sama sekali. Riwayatnya tampil sebagai "n botol".
+- SKU lama tidak diubah (SKU pendek seperti `B`/`RBV` lebih enak diketik di bot).
+
+### Reset TOTAL — hanya bila memang ingin membuang semuanya
+
+⚠️ Menghapus SEMUA data termasuk akun pengguna. Password tidak bisa dipulihkan
+(hash Argon2), dan tautan bot Telegram harus dibuat ulang. Pakai hanya kalau isi
+database benar-benar tidak diperlukan.
+
+```bash
+pg_dump "$DATABASE_URL" -Fc -f sebelum-reset.dump
+cd backend
+alembic downgrade base && alembic upgrade head && python -m app.seed_asf
+```
+
+Kalau `downgrade base` gagal karena dependensi, jalankan sekali lagi, atau drop
+schema langsung:
 `psql "$DATABASE_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'`
 lalu ulangi `upgrade head` + seed.
 
