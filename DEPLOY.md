@@ -45,12 +45,12 @@ Supabase HANYA database — FastAPI tetap perlu di-host terpisah. Redis tidak di
 Skema dikelola Alembic. Setiap deploy menjalankan `alembic upgrade head` sendiri,
 jadi perubahan model yang **punya revisi** akan ikut terpasang otomatis.
 
-⚠️ **Jalankan dengan 1 replika saat ada migrasi.** `entrypoint.sh` menjalankan
+⚠️ **Pastikan hanya 1 replika saat ada migrasi.** `entrypoint.sh` menjalankan
 `alembic upgrade head` di SETIAP container, jadi beberapa replika akan berebut
 menjalankan revisi yang sama: satu berhasil, sisanya gagal dan mencetak
 `[entrypoint] MIGRASI GAGAL`. DDL Postgres transaksional sehingga tidak ada skema
-setengah jadi, tetapi seed ikut dilewati di container yang gagal. Turunkan replika
-ke 1 sebelum deploy yang memuat revisi baru, naikkan lagi sesudah migrasi selesai.
+setengah jadi, tetapi seed ikut dilewati di container yang gagal. Di free tier biasanya
+sudah 1 replika — cukup pastikan tidak dinaikkan saat deploy yang memuat revisi baru.
 
 Menambah/mengubah model WAJIB disertai revisi:
 ```bash
@@ -71,14 +71,15 @@ di database baru yang kolomnya sudah lengkap.
 
 **Langkah:**
 
-1. Siapkan titik pemulihan. Supabase plan berbayar punya backup harian otomatis, tapi
-   umurnya bisa ~24 jam — jangan diandalkan sebagai titik tepat sebelum deploy.
-   - **PITR aktif** (Database → Backups): cukup catat jam & menit (UTC) sebelum push.
-   - **PITR tidak aktif**: ambil dump segar lewat GitHub → **Actions** → "Backup
-     Database Harian" → **Run workflow**, atau manual:
-     ```bash
-     pg_dump "$DATABASE_URL" -Fc -f sebelum-upgrade.dump   # butuh pg_dump v17
-     ```
+1. **Backup — wajib, jangan dilewati.** Supabase free tier TIDAK punya backup otomatis
+   maupun PITR, jadi satu-satunya titik pemulihan adalah dump yang kamu buat sendiri.
+   Cara termudah tanpa memasang apa pun: GitHub → **Actions** → "Backup Database
+   Harian" → **Run workflow**, lalu UNDUH artifact-nya ke komputer. Manual:
+   ```bash
+   pg_dump "$DATABASE_URL" -Fc -f sebelum-upgrade.dump   # butuh pg_dump v17
+   ```
+   Free tier juga menidurkan project setelah idle ~7 hari — pastikan project Supabase
+   aktif sebelum deploy, kalau tidak migrasi akan gagal karena DB tak terjangkau.
 2. Deploy kode baru. `entrypoint.sh` otomatis menjalankan `alembic upgrade head`,
    jadi kolom satuan langsung terbentuk saat boot. Kalau mau menjalankan manual
    (Railway → tab Shell):
