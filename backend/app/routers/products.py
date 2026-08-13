@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import get_db
 from ..models import Product, User
@@ -47,7 +47,9 @@ async def create_product(
 
 # ============================= EDIT & HAPUS =============================
 from fastapi import HTTPException
-from ..models import StockMovement, InvoiceLine, BillLine
+from ..models import (
+    StockMovement, StockLevel, InvoiceLine, BillLine, POLine, SOLine,
+)
 
 
 @router.patch("/{product_id}", response_model=ProductOut)
@@ -98,20 +100,32 @@ async def delete_product(
     if product is None:
         raise HTTPException(status_code=404, detail="Produk tidak ditemukan.")
 
-    used_stock = (await db.execute(
-        select(StockMovement.id).where(StockMovement.product_id == product_id).limit(1)
-    )).scalar_one_or_none()
-    used_inv = (await db.execute(
-        select(InvoiceLine.id).where(InvoiceLine.product_id == product_id).limit(1)
-    )).scalar_one_or_none()
-    used_bill = (await db.execute(
-        select(BillLine.id).where(BillLine.product_id == product_id).limit(1)
-    )).scalar_one_or_none()
-    if used_stock or used_inv or used_bill:
+    # PO & SO ikut diperiksa: tanpa ini, produk yang hanya dipakai di PO/SO draft
+    # lolos pemeriksaan lalu ditolak database (error mentah 500), bukan pesan ramah.
+    dipakai: list[str] = []
+    for label, model in (("faktur penjualan", InvoiceLine),
+                         ("tagihan pembelian", BillLine),
+                         ("purchase order", POLine),
+                         ("sales order", SOLine),
+                         ("mutasi stok", StockMovement)):
+        n = (await db.execute(
+            select(func.count()).select_from(model)
+            .where(model.product_id == product_id)
+        )).scalar_one()
+        if n:
+            dipakai.append(f"{n} {label}")
+
+    if dipakai:
         raise HTTPException(
             status_code=422,
-            detail="Produk sudah dipakai transaksi/stok — tidak bisa dihapus "
-                   "(riwayat harus tetap utuh). Ubah namanya bila perlu.")
+            detail="Produk tidak bisa dihapus karena sudah dipakai "
+                   + ", ".join(dipakai)
+                   + " — riwayat akuntansi harus tetap utuh. Batalkan atau hapus "
+                     "dokumen itu dulu bila memang data uji.")
+
+    # Saldo stok bernilai nol tidak menghalangi penghapusan; buang bersamanya,
+    # kalau tidak foreign key akan menolak.
+    await db.execute(delete(StockLevel).where(StockLevel.product_id == product_id))
     await db.delete(product)
     await db.commit()
     return {"ok": True}

@@ -3,8 +3,10 @@
 Dipakai pada database yang SUDAH TERISI (akun, transaksi, stok tetap utuh).
 Aman dijalankan berulang kali:
 
-    python -m app.master_asf            # tampilkan rencana perubahan (dry-run)
-    python -m app.master_asf --terapkan # jalankan
+    python -m app.master_asf                        # rencana saja (dry-run)
+    python -m app.master_asf --terapkan             # simpan
+    python -m app.master_asf --bersihkan            # + rencana hapus produk lama
+    python -m app.master_asf --bersihkan --terapkan # + hapus produk lama
 
 Yang dikerjakan:
 1. Mengganti nama produk yang berubah (mis. "Captain Morgan Spiced Rum" ->
@@ -13,23 +15,29 @@ Yang dikerjakan:
    lalu menghitung ulang modal per botol.
 3. Menambahkan produk yang belum ada (Chivas 200ml, Azul/Codigo Reposado,
    Mansion Vodka & Whisky) dengan SKU otomatis.
+4. Dengan `--bersihkan`: MENGHAPUS produk di luar daftar resmi client, sehingga
+   master produk berisi tepat 23 produk. Hanya produk yang BELUM PERNAH dipakai
+   transaksi yang dihapus — produk berjejak faktur/tagihan/PO/SO/mutasi stok
+   selalu dilewati dan dilaporkan, supaya riwayat akuntansi tidak pernah bolong.
+   Biasanya dipakai sesudah `python -m app.reset_transactions`.
 
 Yang TIDAK dikerjakan — disengaja:
-- Tidak menghapus produk apa pun. Produk di luar daftar dibiarkan (mungkin
-  ditambahkan manual, dan mungkin sudah punya transaksi).
 - Tidak mengubah SKU produk yang sudah ada. SKU lama yang pendek (mis. "B",
   "RBV") lebih enak diketik di bot Telegram, dan menggantinya hanya menambah
   risiko tanpa manfaat — user tidak pernah melihat SKU di web.
-- Tidak menyentuh stok, avg_cost, maupun jurnal.
+- Tidak menyentuh stok, avg_cost, jurnal, akun pengguna, maupun tautan bot.
 """
 import asyncio
 import sys
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from .core.database import SessionLocal
-from .models import Company, Product
+from .models import (
+    BillLine, Company, InvoiceLine, POLine, Product, SOLine, StockLevel,
+    StockMovement,
+)
 from .seed_asf import COMPANY_NAME, PRODUCTS
 from .services.product_service import generate_sku
 from .services.units import base_price_from_pack
@@ -46,7 +54,20 @@ RENAMES = {
 }
 
 
-async def run(terapkan: bool = False) -> None:
+async def _pemakaian(db, product_id: str) -> dict[str, int]:
+    """Berapa kali produk dipakai di tiap jenis dokumen. Semua nol = aman dihapus."""
+    jumlah = {}
+    for label, model in (("faktur", InvoiceLine), ("tagihan", BillLine),
+                         ("PO", POLine), ("SO", SOLine),
+                         ("mutasi stok", StockMovement)):
+        jumlah[label] = (await db.execute(
+            select(func.count()).select_from(model)
+            .where(model.product_id == product_id)
+        )).scalar_one()
+    return {k: v for k, v in jumlah.items() if v}
+
+
+async def run(terapkan: bool = False, bersihkan: bool = False) -> None:
     async with SessionLocal() as db:
         company = (await db.execute(
             select(Company).where(Company.name == COMPANY_NAME)
@@ -112,14 +133,43 @@ async def run(terapkan: bool = False) -> None:
                 p.purchase_price = per_botol
                 p.unit = "botol"
 
+        # --- 4) Buang produk di luar daftar resmi (opsional) ---
+        dilewati: list[str] = []
+        if bersihkan:
+            resmi = {name.lower() for name, _, _ in PRODUCTS}
+            for p in rows:
+                nama_kini = (p.name or "").strip()
+                if nama_kini.lower() in resmi:
+                    continue
+                dipakai = await _pemakaian(db, p.id)
+                if dipakai:
+                    jejak = ", ".join(f"{v} {k}" for k, v in dipakai.items())
+                    dilewati.append(f"{nama_kini!r} — masih dipakai: {jejak}")
+                    continue
+                rencana.append(f"HAPUS   {nama_kini!r} (di luar daftar, tanpa transaksi)")
+                if terapkan:
+                    # Baris saldo stok nol ikut dibuang, kalau tidak FK menolak hapus.
+                    await db.execute(
+                        delete(StockLevel).where(StockLevel.product_id == p.id))
+                    await db.delete(p)
+
         # --- Laporan ---
-        if not rencana:
+        if not rencana and not dilewati:
             print("Master produk sudah sesuai daftar client. Tidak ada perubahan.")
             return
 
-        print(f"{len(rencana)} perubahan:")
-        for baris in rencana:
-            print("  " + baris)
+        if rencana:
+            print(f"{len(rencana)} perubahan:")
+            for baris in rencana:
+                print("  " + baris)
+
+        if dilewati:
+            print(f"\n{len(dilewati)} produk TIDAK dihapus karena masih berjejak "
+                  f"transaksi (riwayat harus tetap utuh):")
+            for baris in dilewati:
+                print("  - " + baris)
+            print("  Buang dulu transaksinya (python -m app.reset_transactions,")
+            print("  atau hapus permanen dokumennya dari web), lalu ulangi.")
 
         if terapkan:
             await db.commit()
@@ -128,10 +178,13 @@ async def run(terapkan: bool = False) -> None:
                 .where(Product.company_id == company.id)
             )).scalar_one()
             print(f"\nDiterapkan. Total produk sekarang: {total}.")
-        else:
+        elif rencana:
             print("\n(dry-run — belum ada yang disimpan)")
             print("Jalankan ulang dengan --terapkan untuk menyimpan.")
 
 
 if __name__ == "__main__":
-    asyncio.run(run(terapkan="--terapkan" in sys.argv))
+    asyncio.run(run(
+        terapkan="--terapkan" in sys.argv,
+        bersihkan="--bersihkan" in sys.argv,
+    ))
