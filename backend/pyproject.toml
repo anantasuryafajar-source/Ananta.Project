@@ -27,6 +27,10 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.25",
   "aiosqlite>=0.20",
+  # Dibutuhkan tests/test_bot_flow.py: tanpa paket ini `app/bot/handlers.py`
+  # tidak bisa diimpor, dan seluruh logika bot (yang menulis langsung ke jurnal)
+  # lolos dari pengujian.
+  "python-telegram-bot>=21,<22",
 ]
 
 [tool.pytest.ini_options]

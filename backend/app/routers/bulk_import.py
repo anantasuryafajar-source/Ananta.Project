@@ -6,6 +6,7 @@
 
 Baris gagal dilaporkan per-baris; baris lain tetap diproses.
 """
+import re
 from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -20,17 +21,50 @@ from ..services.units import BASE_UNIT, PACK_UNIT, base_price_from_pack, clean_p
 router = APIRouter(tags=["bulk-import"])
 
 
+# Pemisah RIBUAN: titik/koma yang diikuti TEPAT tiga angka, berulang sampai
+# akhir teks — mis. "1.800.000" atau "1,800,000". Pola ini yang membedakannya
+# dari pemisah desimal.
+_RIBUAN = re.compile(r"^\d{1,3}([.,]\d{3})+$")
+
+
 def _num(v, default="0") -> Decimal:
+    """Baca angka dari sel Excel, toleran gaya Indonesia maupun Inggris.
+
+    Sel bisa berisi teks seperti "Rp 1.800.000" (Indonesia) atau "1,800,000.50"
+    (Inggris). Aturannya:
+
+    - Kalau ADA titik dan koma sekaligus, yang MUNCUL TERAKHIR adalah desimal.
+    - Kalau hanya salah satu, dan bentuknya "grup tiga angka" -> pemisah ribuan.
+
+    Aturan grup tiga angka itu penting: `Decimal("600.000")` sah dibaca Python
+    sebagai 600, sehingga modal enam ratus ribu diam-diam tersimpan enam ratus
+    rupiah — lalu HPP dan valuasi persediaan ikut salah 1.000x.
+    """
     if v is None or str(v).strip() == "":
         return Decimal(default)
-    s = str(v).replace("Rp", "").replace(" ", "").strip()
+    s = str(v).replace("Rp", "").replace("rp", "").replace(" ", "").strip()
+    if not s:
+        return Decimal(default)
+
+    negatif = s.startswith("-")
+    s = s.lstrip("-+")
+
+    if "." in s and "," in s:
+        # Yang terakhir muncul adalah pemisah desimal.
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")   # 1.800.000,50
+        else:
+            s = s.replace(",", "")                     # 1,800,000.50
+    elif _RIBUAN.match(s):
+        s = s.replace(".", "").replace(",", "")        # 1.800.000 / 600.000
+    elif "," in s:
+        s = s.replace(",", ".")                        # 1500,75
+
     try:
-        return Decimal(s.replace(",", ""))            # 1,250,000 / 1250000.5
+        angka = Decimal(s)
     except InvalidOperation:
-        try:
-            return Decimal(s.replace(".", "").replace(",", "."))  # 1.250.000,50
-        except InvalidOperation:
-            raise ValueError(f"Angka tidak valid: {v}")
+        raise ValueError(f"Angka tidak valid: {v}")
+    return -angka if negatif else angka
 
 
 class RowsIn(BaseModel):
