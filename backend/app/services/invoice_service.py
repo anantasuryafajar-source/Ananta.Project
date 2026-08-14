@@ -92,6 +92,7 @@ async def create_and_post_invoice(
             quantity=qty_base, qty_input=qty_input, unit=unit, unit_factor=factor,
             unit_price=price, discount=discount,
             tax_rate=tax_rate, line_total=_q(base + tax),
+            note=(raw.get("note") or None),
         ))
 
         # Potong stok hanya untuk barang (good), bukan jasa.

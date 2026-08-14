@@ -107,6 +107,7 @@ async def create_and_post_bill(
             quantity=qty_base, qty_input=qty_input, unit=unit, unit_factor=factor,
             unit_cost=cost, discount=discount,
             tax_rate=tax_rate, line_total=_q(base + tax),
+            note=(raw.get("note") or None),
         ))
 
         if product and product.kind == "good" and warehouse_id:

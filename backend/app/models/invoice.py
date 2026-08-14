@@ -50,6 +50,9 @@ class InvoiceLine(Base, PKMixin):
     discount: Mapped[object] = mapped_column(Money, default=0)
     tax_rate: Mapped[object] = mapped_column(Money, default=0)  # persen, mis. 11
     line_total: Mapped[object] = mapped_column(Money, default=0)
+    # Keterangan khusus BARIS ini (mis. "2 botol pecah", "beda batch").
+    # Berbeda dari `notes` di tingkat dokumen yang berlaku untuk seluruh nota.
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     invoice: Mapped["Invoice"] = relationship(back_populates="lines")
 

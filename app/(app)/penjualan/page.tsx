@@ -27,6 +27,7 @@ type Line = {
   product_id: string; description: string;
   quantity: string; unit: "dus" | "botol";
   unit_price: string; discount: string; tax_rate: string;
+  note: string;   // keterangan khusus baris ini
 };
 
 const STATUS: Record<string, string> = {
@@ -39,7 +40,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 // aman daripada default "dus" yang melebihkan stok sampai 48x.
 const baris = (): Line => ({
   product_id: "", description: "", quantity: "1", unit: "botol",
-  unit_price: "0", discount: "0", tax_rate: "0",
+  unit_price: "0", discount: "0", tax_rate: "0", note: "",
 });
 
 function lineTotal(l: Line): number {
@@ -231,6 +232,7 @@ export default function PenjualanPage() {
             quantity: l.quantity,
             unit: l.unit,
             unit_price: l.unit_price || "0",
+            note: l.note.trim() || null,
             discount: l.discount || "0",
             tax_rate: l.tax_rate || "0",
           })),
@@ -389,6 +391,11 @@ export default function PenjualanPage() {
                             placeholder="Deskripsi"
                             className="w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-2 py-1 text-sm text-ink focus:border-primary focus:bg-surface focus:outline-none" />
                         )}
+                        {/* Keterangan khusus baris ini — tetap bisa diisi walau produk
+                            dipilih dari daftar. Beda dari catatan nota di bawah form. */}
+                        <input value={l.note} onChange={(e) => setLine(i, { note: e.target.value })}
+                          maxLength={255} placeholder="Keterangan item (opsional)"
+                          className="mt-1 w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-2 py-1 text-caption text-ink placeholder:text-ink-subtle focus:border-primary focus:bg-surface focus:outline-none" />
                       </td>
                       <td className="px-2 py-1.5 w-20"><NumCell value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
                       <td className="px-2 py-1.5 w-24">

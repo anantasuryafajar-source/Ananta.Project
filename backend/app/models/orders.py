@@ -45,6 +45,8 @@ class POLine(Base, PKMixin):
     discount: Mapped[object] = mapped_column(Money, default=0)
     tax_rate: Mapped[object] = mapped_column(Money, default=0)
     line_total: Mapped[object] = mapped_column(Money, default=0)
+    # Keterangan baris; ikut terbawa ke Bill saat PO diterima.
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     order: Mapped["PurchaseOrder"] = relationship(back_populates="lines")
 
 
@@ -88,4 +90,6 @@ class SOLine(Base, PKMixin):
     discount: Mapped[object] = mapped_column(Money, default=0)
     tax_rate: Mapped[object] = mapped_column(Money, default=0)
     line_total: Mapped[object] = mapped_column(Money, default=0)
+    # Keterangan baris; ikut terbawa ke Faktur saat SO difakturkan.
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     order: Mapped["SalesOrder"] = relationship(back_populates="lines")

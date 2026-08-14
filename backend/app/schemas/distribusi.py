@@ -85,6 +85,9 @@ class OrderLineIn(BaseModel):
     unit_price: Decimal = Field(ge=0)  # unit_cost utk PO, unit_price utk SO
     discount: Decimal = Decimal("0")
     tax_rate: Decimal = Decimal("0")
+    # Keterangan khusus baris ini (mis. "2 botol pecah"). Berbeda dari
+    # `notes` dokumen yang berlaku untuk seluruh nota.
+    note: str | None = Field(default=None, max_length=255)
 
 
 class PurchaseOrderIn(BaseModel):
@@ -114,6 +117,7 @@ class OrderLineOut(ORMModel):
     qty_input: Decimal       # seperti diketik user
     unit: str                # "dus" | "botol"
     line_total: Decimal
+    note: str | None = None
 
 
 class PurchaseOrderOut(ORMModel):

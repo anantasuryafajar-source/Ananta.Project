@@ -60,6 +60,7 @@ async def _prep_lines(db, lines_in: list[dict]):
             "unit": unit, "unit_factor": factor,
             "price": price, "discount": disc,
             "tax_rate": rate, "line_total": _q(base + tax),
+            "note": (raw.get("note") or None),
         })
     return _q(subtotal), _q(tax_total), prepared
 
@@ -85,6 +86,7 @@ async def create_purchase_order(
             unit_factor=p["unit_factor"],
             unit_cost=p["price"], discount=p["discount"],
             tax_rate=p["tax_rate"], line_total=p["line_total"],
+            note=p["note"],
         ) for p in prepared],
     )
     db.add(po)
@@ -107,6 +109,8 @@ async def receive_purchase_order(db, *, company_id, user_id, po_id) -> PurchaseO
         "product_id": l.product_id, "description": l.description,
         "quantity": l.qty_input, "unit": l.unit, "unit_cost": l.unit_cost,
         "discount": l.discount, "tax_rate": l.tax_rate,
+        # Keterangan ikut terbawa; tanpa ini ia hilang diam-diam saat dikonversi.
+        "note": l.note,
     } for l in po.lines]
     bill = await create_and_post_bill(
         db, company_id=company_id, user_id=user_id, contact_id=po.contact_id,
@@ -138,6 +142,7 @@ async def create_sales_order(
             unit_factor=p["unit_factor"],
             unit_price=p["price"], discount=p["discount"],
             tax_rate=p["tax_rate"], line_total=p["line_total"],
+            note=p["note"],
         ) for p in prepared],
     )
     db.add(so)
@@ -158,6 +163,7 @@ async def invoice_sales_order(db, *, company_id, user_id, so_id) -> SalesOrder:
         "product_id": l.product_id, "description": l.description,
         "quantity": l.qty_input, "unit": l.unit, "unit_price": l.unit_price,
         "discount": l.discount, "tax_rate": l.tax_rate,
+        "note": l.note,
     } for l in so.lines]
     invoice = await create_and_post_invoice(
         db, company_id=company_id, user_id=user_id, contact_id=so.contact_id,

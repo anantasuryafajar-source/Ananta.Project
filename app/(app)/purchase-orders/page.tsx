@@ -14,11 +14,11 @@ type PO = { id: string; number: string; date: string; status: string; total: str
 type Contact = { id: string; name: string };
 type Product = { id: string; name: string; purchase_price: string; pack_purchase_price: string; pack_size: number };
 type Warehouse = { id: string; name: string };
-type Line = { product_id: string; description: string; quantity: string; unit: "dus" | "botol"; unit_price: string; discount: string; tax_rate: string };
+type Line = { product_id: string; description: string; quantity: string; unit: "dus" | "botol"; unit_price: string; discount: string; tax_rate: string; note: string };
 
 const today = () => new Date().toISOString().slice(0, 10);
 // Pengadaan dari supplier umumnya per dus.
-const baris = (): Line => ({ product_id: "", description: "", quantity: "1", unit: "dus", unit_price: "0", discount: "0", tax_rate: "0" });
+const baris = (): Line => ({ product_id: "", description: "", quantity: "1", unit: "dus", unit_price: "0", discount: "0", tax_rate: "0", note: "" });
 const STATUS: Record<string, string> = { draft: "text-ink-subtle", received: "text-success", cancelled: "text-danger" };
 
 function lineTotal(l: Line) {
@@ -85,7 +85,7 @@ export default function PurchaseOrdersPage() {
           contact_id: contactId, date, warehouse_id: whId || null,
           freight_total: freight || "0", freight_supplier_share: freightSup || "0",
           notes: notes || null,
-          lines: valid.map((l) => ({ product_id: l.product_id || null, description: l.description || null, quantity: l.quantity, unit: l.unit, unit_price: l.unit_price || "0", discount: l.discount || "0", tax_rate: l.tax_rate || "0" })),
+          lines: valid.map((l) => ({ product_id: l.product_id || null, description: l.description || null, quantity: l.quantity, unit: l.unit, unit_price: l.unit_price || "0", discount: l.discount || "0", tax_rate: l.tax_rate || "0", note: l.note.trim() || null })),
         }),
       });
       setOpen(false); muat();
@@ -233,6 +233,8 @@ function LineTable({ lines, setLines, products, pilihProduk, setLine, pilihSatua
                     {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </Select>
                   {!l.product_id && <input value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Deskripsi" className="w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-2 py-1 text-sm text-ink focus:border-primary focus:bg-surface focus:outline-none" />}
+                  {/* Keterangan khusus baris ini — tetap bisa diisi walau produk dipilih dari daftar. */}
+                  <input value={l.note} onChange={(e) => setLine(i, { note: e.target.value })} maxLength={255} placeholder="Keterangan item (opsional)" className="mt-1 w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-2 py-1 text-caption text-ink placeholder:text-ink-subtle focus:border-primary focus:bg-surface focus:outline-none" />
                 </td>
                 <td className="w-20 px-2 py-1.5"><NumCell value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
                 <td className="w-24 px-2 py-1.5">

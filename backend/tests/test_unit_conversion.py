@@ -10,8 +10,8 @@ from decimal import Decimal
 from sqlalchemy import select
 
 from app.models import (
-    Account, Company, Contact, Journal, JournalEntry, Product, StockLevel,
-    Warehouse,
+    Account, Bill, Company, Contact, Journal, JournalEntry, Product,
+    StockLevel, Warehouse,
 )
 from app.services.accounts_map import DEFAULT_CODES
 from app.services.invoice_service import create_and_post_invoice
@@ -292,6 +292,60 @@ async def test_valuasi_stok_cocok_dengan_saldo_persediaan_di_jurnal(db):
     assert valuasi == saldo_jurnal, (
         f"valuasi stok {valuasi} != saldo Persediaan {saldo_jurnal}"
     )
+
+
+# --------------------------------------------- keterangan per baris (regresi)
+async def test_keterangan_per_baris_tersimpan_dan_terbawa(db):
+    """Keterangan menempel pada BARIS, bukan dokumen — dan tidak boleh hilang
+    saat PO dikonversi jadi tagihan.
+
+    Kolom `description` tidak bisa dipakai untuk ini: ia terisi otomatis dengan
+    nama produk dan di UI hanya bisa diketik saat baris tanpa produk master.
+    """
+    company, wh, supplier, customer, product = await _setup(
+        db, pack_size=24, stock="48", avg_cost="75000")
+
+    # --- tagihan langsung ---
+    bill = await create_and_post_bill(
+        db, company_id=company.id, user_id=None, contact_id=supplier.id,
+        on_date=date.today(), warehouse_id=wh.id,
+        lines_in=[
+            {"product_id": product.id, "quantity": "1", "unit": "dus",
+             "unit_cost": "1800000", "note": "2 botol pecah"},
+            {"product_id": product.id, "quantity": "5", "unit": "botol",
+             "unit_cost": "80000"},
+        ],
+    )
+    assert bill.lines[0].note == "2 botol pecah"
+    assert bill.lines[0].description == "Chivas 200ml"   # nama produk tetap utuh
+    assert bill.lines[1].note is None                    # kosong -> None, bukan ""
+
+    # --- faktur penjualan ---
+    invoice = await create_and_post_invoice(
+        db, company_id=company.id, user_id=None, contact_id=customer.id,
+        on_date=date.today(), warehouse_id=wh.id,
+        lines_in=[{"product_id": product.id, "quantity": "1", "unit": "dus",
+                   "unit_price": "2400000", "note": "titipan Pak Regar"}],
+    )
+    assert invoice.lines[0].note == "titipan Pak Regar"
+
+    # --- PO -> Bill: keterangan harus ikut ---
+    po = await create_purchase_order(
+        db, company_id=company.id, user_id=None, contact_id=supplier.id,
+        on_date=date.today(), expected_date=None, warehouse_id=wh.id,
+        freight_total=Decimal("0"), freight_supplier_share=Decimal("0"),
+        notes=None,
+        lines_in=[{"product_id": product.id, "quantity": "2", "unit": "dus",
+                   "unit_price": "1800000", "note": "beda batch"}],
+    )
+    assert po.lines[0].note == "beda batch"
+
+    po = await receive_purchase_order(db, company_id=company.id, user_id=None,
+                                     po_id=po.id)
+    bill_dari_po = (await db.execute(
+        select(Bill).where(Bill.id == po.bill_id)
+    )).scalar_one()
+    assert bill_dari_po.lines[0].note == "beda batch"
 
 
 # ------------------------------------------------------- PO -> Bill (regresi)

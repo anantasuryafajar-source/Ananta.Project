@@ -105,6 +105,7 @@ async def invoice_detail(
             "qty_input": str(l.qty_input),
             "unit": l.unit,
             "unit_price": str(l.unit_price),
+            "note": l.note,
             "discount": str(l.discount),
             "tax_rate": str(l.tax_rate),
             "line_total": str(l.line_total),

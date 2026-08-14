@@ -14,6 +14,9 @@ class BillLineIn(BaseModel):
     unit_cost: Decimal = Field(ge=0)
     discount: Decimal = Decimal("0")
     tax_rate: Decimal = Decimal("0")
+    # Keterangan khusus baris ini (mis. "2 botol pecah"). Berbeda dari
+    # `notes` dokumen yang berlaku untuk seluruh nota.
+    note: str | None = Field(default=None, max_length=255)
 
 
 class BillIn(BaseModel):
@@ -35,6 +38,7 @@ class BillLineOut(ORMModel):
     discount: Decimal
     tax_rate: Decimal
     line_total: Decimal
+    note: str | None = None
 
 
 class BillOut(ORMModel):
