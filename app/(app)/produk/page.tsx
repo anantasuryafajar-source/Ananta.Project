@@ -17,6 +17,7 @@ type Product = {
   pack_purchase_price: string;   // modal per dus (yang diketik)
   purchase_price: string;        // modal per botol (dihitung sistem)
   min_stock: string;
+  note: string | null;           // keterangan kondisi barang
 };
 type StockItem = {
   sku: string; quantity: string; qty_display: string;
@@ -28,7 +29,7 @@ type Stock = { items: StockItem[]; total_value: string };
 // pembuatan faktur penjualan. SKU juga tidak diketik — dibuat otomatis.
 const KOSONG = {
   name: "", kind: "good", pack_size: "12",
-  pack_purchase_price: "0", min_stock: "0",
+  pack_purchase_price: "0", min_stock: "0", note: "",
 };
 
 export default function ProdukPage() {
@@ -106,6 +107,8 @@ export default function ProdukPage() {
           // Modal dikirim per DUS; backend membagi ke per botol.
           pack_purchase_price: form.pack_purchase_price || "0",
           min_stock: form.min_stock || "0",
+          // kosong = hapus keterangan
+          note: form.note.trim() || null,
         }),
       });
       setOpen(false);
@@ -126,6 +129,7 @@ export default function ProdukPage() {
       pack_size: String(p.pack_size ?? 12),
       pack_purchase_price: p.pack_purchase_price ?? "0",
       min_stock: p.min_stock ?? "0",
+      note: p.note ?? "",
     });
     setOpen(true);
   }
@@ -198,7 +202,13 @@ export default function ProdukPage() {
                   const s = stock[p.sku];
                   return (
                     <tr key={p.id} className="border-b border-line last:border-0 hover:bg-surface-sunken">
-                      <td className="px-4 py-3 text-ink">{p.name}</td>
+                      <td className="px-4 py-3 text-ink">
+                        {p.name}
+                        {/* Keterangan kondisi barang dari pembelian terakhir. */}
+                        {p.note && (
+                          <span className="mt-0.5 block text-caption text-ink-subtle">{p.note}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-center tabular-nums text-ink-muted">{p.pack_size} btl</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink">{rupiah(p.pack_purchase_price)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{rupiah(p.purchase_price)}</td>
@@ -262,6 +272,12 @@ export default function ProdukPage() {
 
           <Field label="Stok Minimum (botol)">
             <Input type="number" min={0} value={form.min_stock} onChange={(e) => set("min_stock", e.target.value)} />
+          </Field>
+
+          <Field label="Keterangan"
+            hint="Terisi otomatis dari keterangan pembelian terakhir. Kosongkan untuk menghapus — dokumen pembelian tidak ikut berubah.">
+            <Input value={form.note} maxLength={255} placeholder="mis. 2 botol pecah"
+              onChange={(e) => set("note", e.target.value)} />
           </Field>
 
           <p className="text-caption text-ink-subtle">

@@ -39,6 +39,12 @@ class Product(Base, PKMixin, TimestampMixin):
     purchase_price: Mapped[object] = mapped_column(Money, default=0)
     # Stok minimum, dalam satuan DASAR (botol).
     min_stock: Mapped[object] = mapped_column(Qty, default=0)
+    # Keterangan kondisi barang yang tampil di daftar Produk & Stok, mis.
+    # "2 botol pecah". Diisi otomatis dari keterangan baris PEMBELIAN terakhir
+    # (yang terbaru menimpa yang lama) dan bisa diubah/dikosongkan dari form
+    # produk. Mengubahnya di sini TIDAK menyentuh dokumen pembelian — catatan di
+    # dokumen adalah jejak audit dan harus tetap seperti saat dicatat.
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # akun terkait (opsional override default perusahaan)
     income_account_id: Mapped[str | None] = mapped_column(ForeignKey("accounts.id"), nullable=True)
     inventory_account_id: Mapped[str | None] = mapped_column(ForeignKey("accounts.id"), nullable=True)

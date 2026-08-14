@@ -74,6 +74,7 @@ async def create_product(
     pack_purchase_price: Decimal = Decimal("0"),
     sale_price: Decimal = Decimal("0"),
     min_stock: Decimal = Decimal("0"),
+    note: str | None = None,
     commit: bool = True,
 ) -> Product:
     """Buat produk. `pack_purchase_price` adalah modal per DUS (bukan per botol)."""
@@ -91,6 +92,7 @@ async def create_product(
         purchase_price=base_price_from_pack(pack_modal, size),
         sale_price=sale_price,
         min_stock=min_stock,
+        note=(note or None),
     )
     db.add(product)
     if commit:

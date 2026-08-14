@@ -109,14 +109,22 @@ async def create_and_post_bill(
         factor = factor_for(unit, product.pack_size if product else 1)
         qty_base = to_base(qty_input, factor)
 
+        keterangan = (raw.get("note") or "").strip()[:255] or None
         bill_lines.append(BillLine(
             product_id=raw.get("product_id"),
             description=raw.get("description") or (product.name if product else ""),
             quantity=qty_base, qty_input=qty_input, unit=unit, unit_factor=factor,
             unit_cost=cost, discount=discount,
             tax_rate=tax_rate, line_total=_q(base + tax),
-            note=(raw.get("note") or None),
+            note=keterangan,
         ))
+
+        # Keterangan kondisi barang ikut menempel ke master produk supaya
+        # terlihat di daftar Produk & Stok. Yang terbaru menimpa yang lama.
+        # Baris di dokumen ini TIDAK ikut berubah bila keterangan produk nanti
+        # diedit — dokumen adalah jejak audit.
+        if product and keterangan:
+            product.note = keterangan
 
         if product and product.kind == "good" and warehouse_id:
             # Biaya per BOTOL setelah diskon baris: nilai baris / jumlah botol.

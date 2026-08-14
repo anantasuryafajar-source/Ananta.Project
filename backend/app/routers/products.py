@@ -42,6 +42,7 @@ async def create_product(
         pack_size=body.pack_size,
         pack_purchase_price=body.pack_purchase_price,
         min_stock=body.min_stock,
+        note=body.note,
     )
 
 
@@ -81,6 +82,10 @@ async def update_product(
     product.pack_size = size
     product.pack_purchase_price = pack_modal
     product.purchase_price = base_price_from_pack(pack_modal, size)
+
+    # Keterangan dikosongkan bila field dikirim kosong — itulah cara
+    # menghapusnya dari form. Dokumen pembelian TIDAK ikut berubah.
+    product.note = (body.note or "").strip() or None
 
     await db.commit()
     await db.refresh(product)

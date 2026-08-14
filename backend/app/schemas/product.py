@@ -20,6 +20,9 @@ class ProductIn(BaseModel):
     pack_size: int = Field(default=12, ge=1, le=10_000)
     pack_purchase_price: Decimal = Field(default=Decimal("0"), ge=0)
     min_stock: Decimal = Field(default=Decimal("0"), ge=0)
+    # Keterangan kondisi barang. Terisi otomatis dari keterangan baris pembelian
+    # terakhir, dan boleh diubah/dikosongkan dari sini.
+    note: str | None = Field(default=None, max_length=255)
 
 
 class ProductOut(ORMModel):
@@ -34,4 +37,5 @@ class ProductOut(ORMModel):
     purchase_price: Decimal        # modal per botol (turunan)
     sale_price: Decimal            # harga acuan lama; 0 bila tidak dipakai
     min_stock: Decimal
+    note: str | None = None
     is_active: bool
