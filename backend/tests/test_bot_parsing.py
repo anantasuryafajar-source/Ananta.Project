@@ -106,17 +106,17 @@ def test_parse_item_line():
     from app.bot.parsing import ItemUnitMissing, parse_item_line
 
     assert parse_item_line("MNS-WHK x 10 dus @ 250000") == (
-        "MNS-WHK", Decimal("10"), "dus", Decimal("250000"))
+        "MNS-WHK", Decimal("10"), "dus", Decimal("250000"), None)
     assert parse_item_line("CLA-AZL x 5 botol @ 800.000") == (
-        "CLA-AZL", Decimal("5"), "botol", Decimal("800000"))
+        "CLA-AZL", Decimal("5"), "botol", Decimal("800000"), None)
     # alias satuan & huruf besar tetap dikenali
     assert parse_item_line("MNS-WHK x 2 DUS @ 100") == (
-        "MNS-WHK", Decimal("2"), "dus", Decimal("100"))
+        "MNS-WHK", Decimal("2"), "dus", Decimal("100"), None)
     assert parse_item_line("MNS-WHK x 2 btl @ 100") == (
-        "MNS-WHK", Decimal("2"), "botol", Decimal("100"))
+        "MNS-WHK", Decimal("2"), "botol", Decimal("100"), None)
     # 'X' di dalam SKU tetap aman
     assert parse_item_line("BOXES x 3 botol @ 0") == (
-        "BOXES", Decimal("3"), "botol", Decimal("0"))
+        "BOXES", Decimal("3"), "botol", Decimal("0"), None)
 
     assert parse_item_line("ngawur") is None
     assert parse_item_line("SKU x 0 dus @ 100") is None      # qty harus > 0
@@ -125,6 +125,40 @@ def test_parse_item_line():
     # Format lama tanpa satuan DITOLAK dengan galat khusus, bukan ditebak.
     with pytest.raises(ItemUnitMissing):
         parse_item_line("MNS-WHK x 10 @ 250000")
+    with pytest.raises(ItemUnitMissing):
+        parse_item_line("MNS-WHK x 10 @ 250000 # ada catatan")
+
+
+def test_parse_item_line_keterangan_opsional():
+    """'# keterangan' setara kotak "Keterangan item" di web — opsional."""
+    from app.bot.parsing import parse_item_line
+
+    assert parse_item_line("CHIVAS x 10 dus @ 1800000 # 2 botol pecah") == (
+        "CHIVAS", Decimal("10"), "dus", Decimal("1800000"), "2 botol pecah")
+    # spasi bebas & keterangan boleh memuat tanda baca
+    assert parse_item_line("CHIVAS x 1 dus @ 1800000   #beda batch, cek expired") == (
+        "CHIVAS", Decimal("1"), "dus", Decimal("1800000"), "beda batch, cek expired")
+    # '#' kosong dianggap tidak ada keterangan
+    assert parse_item_line("CHIVAS x 1 dus @ 1800000 #") == (
+        "CHIVAS", Decimal("1"), "dus", Decimal("1800000"), None)
+
+
+def test_parse_blok_mengenali_catatan_nota():
+    """`Catatan:` mengisi catatan tingkat dokumen, bukan per baris."""
+    from app.bot.parsing import parse_pengadaan_block, parse_penjualan_block
+
+    beli = parse_pengadaan_block(
+        "Supplier: EXA\n"
+        "Catatan: kiriman susulan\n"
+        "Item: CHIVAS x 1 dus @ 1800000"
+    )
+    assert beli["supplier"] == "EXA"
+    assert beli["notes"] == "kiriman susulan"
+    assert beli["items"] == ["CHIVAS x 1 dus @ 1800000"]
+
+    jual = parse_penjualan_block(
+        "Customer: Toko Berkah\nItem: CHIVAS x 1 botol @ 110000")
+    assert jual["notes"] is None   # tanpa Catatan: -> None, bukan string kosong
 
 
 def test_parse_product_block_membaca_modal_per_dus():
@@ -167,3 +201,53 @@ Item: CLA-AZL x 1 @ 950000"""
     b = parse_penjualan_block(blk)
     assert b["customer"] == "Toko Berkah"
     assert len(b["items"]) == 2
+
+
+def test_draft_to_lines_in_membawa_satuan_dan_keterangan():
+    """REGRESI: satuan pernah HILANG di jalur konfirmasi bot.
+
+    Baris draft menyimpan "10 dus", tetapi pemetaan ke service dulu hanya
+    mengirim product_id/quantity/harga. Service lalu memakai default "botol",
+    sehingga 10 dus tercatat 10 botol — salah 12-48x dan langsung masuk jurnal.
+    """
+    import pytest
+    from app.bot.parsing import DraftUnitMissing, draft_to_lines_in
+
+    draft = [
+        {"product_id": "p1", "quantity": "10", "unit": "dus",
+         "unit_cost": "1800000", "note": "2 botol pecah"},
+        {"product_id": "p2", "quantity": "5", "unit": "botol",
+         "unit_cost": "80000", "note": None},
+    ]
+    got = draft_to_lines_in(draft, price_field="unit_cost")
+    assert got[0] == {
+        "product_id": "p1", "quantity": Decimal("10"), "unit": "dus",
+        "unit_cost": Decimal("1800000"), "note": "2 botol pecah",
+    }
+    assert got[1]["unit"] == "botol" and got[1]["note"] is None
+
+    # penjualan memakai nama field harga yang berbeda
+    jual = draft_to_lines_in(
+        [{"product_id": "p1", "quantity": "1", "unit": "dus",
+          "unit_price": "2400000"}],
+        price_field="unit_price")
+    assert jual[0]["unit"] == "dus"
+    assert jual[0]["unit_price"] == Decimal("2400000")
+
+    # Sesi lama tanpa satuan DITOLAK — tidak boleh diam-diam dianggap botol.
+    for rusak in ({"product_id": "p1", "quantity": "10", "unit_cost": "1"},
+                  {"product_id": "p1", "quantity": "10", "unit": "",
+                   "unit_cost": "1"}):
+        with pytest.raises(DraftUnitMissing):
+            draft_to_lines_in([rusak], price_field="unit_cost")
+
+
+def test_handlers_sintaksis_valid():
+    """`app/bot/handlers.py` tidak bisa diimpor di tes karena butuh paket
+    `telegram`, sehingga kesalahan sintaks di sana lolos dari pytest. Tes ini
+    setidaknya memastikan filenya masih bisa di-parse."""
+    import ast
+    import pathlib
+
+    berkas = pathlib.Path(__file__).resolve().parents[1] / "app" / "bot" / "handlers.py"
+    ast.parse(berkas.read_text(encoding="utf-8"), filename=str(berkas))

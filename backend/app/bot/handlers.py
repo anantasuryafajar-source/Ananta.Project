@@ -41,7 +41,9 @@ from .parsing import (
     parse_amount,
     parse_contact_block,
     parse_expense_block,
+    DraftUnitMissing,
     ItemUnitMissing,
+    draft_to_lines_in,
     parse_item_line,
     parse_loan_block,
     parse_payment_block,
@@ -81,21 +83,25 @@ JUAL_HINT = (
     "Format:\n/jual\n"
     "Customer: Toko Berkah\n"
     "Gudang: Gudang Utama   (opsional)\n"
+    "Catatan: kirim sore ini   (opsional, untuk seluruh nota)\n"
     "Item: CHIVAS-200ML x 1 dus @ 2400000\n"
-    "Item: CHIVAS-200ML x 5 botol @ 110000\n\n"
+    "Item: CHIVAS-200ML x 5 botol @ 110000 # bonus\n\n"
     "Tiap Item: SKU x jumlah SATUAN @ harga per satuan.\n"
     "Satuan WAJIB ditulis: dus atau botol.\n"
-    "Pesanan campur (1 dus + 5 botol) = dua baris Item seperti contoh."
+    "Pesanan campur (1 dus + 5 botol) = dua baris Item seperti contoh.\n"
+    "Tambahkan '# keterangan' di akhir baris bila item itu perlu catatan."
 )
 
 PENGADAAN_HINT = (
     "Format:\n/pengadaan\n"
     "Supplier: PT Sumber Minuman\n"
     "Gudang: Gudang Utama   (opsional)\n"
-    "Item: CHIVAS-200ML x 10 dus @ 1800000\n"
+    "Catatan: kiriman susulan   (opsional, untuk seluruh nota)\n"
+    "Item: CHIVAS-200ML x 10 dus @ 1800000 # 2 botol pecah\n"
     "Item: CHIVAS-200ML x 5 botol @ 80000\n\n"
     "Tiap Item: SKU x jumlah SATUAN @ modal per satuan.\n"
-    "Satuan WAJIB ditulis: dus atau botol."
+    "Satuan WAJIB ditulis: dus atau botol.\n"
+    "Tambahkan '# keterangan' di akhir baris bila item itu perlu catatan."
 )
 
 PAY_SUPPLIER_HINT = (
@@ -812,14 +818,16 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
                         return
                     on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()
-                    lines_in = [
-                        {
-                            "product_id": ln["product_id"],
-                            "quantity": Decimal(ln["quantity"]),
-                            "unit_cost": Decimal(ln["unit_cost"]),
-                        }
-                        for ln in draft["lines"]
-                    ]
+                    try:
+                        lines_in = draft_to_lines_in(draft["lines"],
+                                                     price_field="unit_cost")
+                    except DraftUnitMissing:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text(
+                            "Format perintah sudah diperbarui (satuan kini wajib). "
+                            "Ketik ulang /pengadaan ya."
+                        )
+                        return
                     try:
                         bill = await create_and_post_bill(
                             db,
@@ -829,7 +837,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             on_date=on_date,
                             warehouse_id=draft.get("warehouse_id"),
                             lines_in=lines_in,
-                            notes=None,
+                            notes=draft.get("notes"),
                         )
                         await db.commit()
                     except (JournalNotBalanced, ValueError) as e:
@@ -863,14 +871,16 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
                         return
                     on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()
-                    lines_in = [
-                        {
-                            "product_id": ln["product_id"],
-                            "quantity": Decimal(ln["quantity"]),
-                            "unit_price": Decimal(ln["unit_price"]),
-                        }
-                        for ln in draft["lines"]
-                    ]
+                    try:
+                        lines_in = draft_to_lines_in(draft["lines"],
+                                                     price_field="unit_price")
+                    except DraftUnitMissing:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text(
+                            "Format perintah sudah diperbarui (satuan kini wajib). "
+                            "Ketik ulang /jual ya."
+                        )
+                        return
                     try:
                         inv = await create_and_post_invoice(
                             db,
@@ -880,7 +890,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             on_date=on_date,
                             warehouse_id=draft.get("warehouse_id"),
                             lines_in=lines_in,
-                            notes=None,
+                            notes=draft.get("notes"),
                         )
                         await db.commit()
                     except (JournalNotBalanced, ValueError) as e:
@@ -1359,7 +1369,7 @@ async def cmd_pengadaan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             if item is None:
                 errors.append(f"Baris {i} salah format: '{raw}'")
                 continue
-            sku, qty, unit, price = item
+            sku, qty, unit, price, note = item
             prod = await _find_product_by_sku(db, u.company_id, sku)
             if prod is None:
                 errors.append(f"SKU '{sku}' tidak ditemukan (baris {i})")
@@ -1370,12 +1380,13 @@ async def cmd_pengadaan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             # mengonversi ke botol untuk stok & avg_cost.
             lines.append({
                 "product_id": prod.id, "quantity": str(qty), "unit": unit,
-                "unit_cost": str(price),
+                "unit_cost": str(price), "note": note,
             })
             botol = format_qty(qty * factor_for(unit, prod.pack_size), prod.pack_size)
             summary_lines.append(
                 f"- {prod.name} x {qty} {unit} ({botol}) @ {_rp(price)}/{unit}"
                 f" = {_rp(subtotal)}"
+                + (f"\n    ket: {note}" if note else "")
             )
 
         if errors:
@@ -1389,6 +1400,7 @@ async def cmd_pengadaan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "supplier_name": supplier.name,
             "warehouse_id": wh_id,
             "lines": lines,
+            "notes": parsed.get("notes"),
         }
         await set_state(db, chat_id, "pengadaan", "confirm", draft)
     await update.message.reply_text(
@@ -1473,7 +1485,7 @@ async def cmd_jual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             if item is None:
                 errors.append(f"Baris {i} salah format: '{raw}'")
                 continue
-            sku, qty, unit, price = item
+            sku, qty, unit, price, note = item
             prod = await _find_product_by_sku(db, u.company_id, sku)
             if prod is None:
                 errors.append(f"SKU '{sku}' tidak ditemukan (baris {i})")
@@ -1484,12 +1496,13 @@ async def cmd_jual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # mengonversi ke botol untuk stok & avg_cost.
             lines.append({
                 "product_id": prod.id, "quantity": str(qty), "unit": unit,
-                "unit_price": str(price),
+                "unit_price": str(price), "note": note,
             })
             botol = format_qty(qty * factor_for(unit, prod.pack_size), prod.pack_size)
             summary_lines.append(
                 f"- {prod.name} x {qty} {unit} ({botol}) @ {_rp(price)}/{unit}"
                 f" = {_rp(subtotal)}"
+                + (f"\n    ket: {note}" if note else "")
             )
 
         if errors:
@@ -1503,6 +1516,7 @@ async def cmd_jual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "customer_name": customer.name,
             "warehouse_id": wh_id,
             "lines": lines,
+            "notes": parsed.get("notes"),
         }
         await set_state(db, chat_id, "penjualan", "confirm", draft)
     await update.message.reply_text(
