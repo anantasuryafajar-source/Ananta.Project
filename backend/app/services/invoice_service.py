@@ -26,7 +26,8 @@ from .journal import Line, post_journal
 from .numbering import next_number
 from .accounts_map import code_to_id
 from .units import (
-    BASE_UNIT, factor_for, format_qty, to_base, try_normalize_unit,
+    BASE_UNIT, factor_for, format_qty, resolve_warehouse, to_base,
+    try_normalize_unit,
 )
 
 CENT = Decimal("0.01")
@@ -51,6 +52,11 @@ async def create_and_post_invoice(
         select(Contact).where(Contact.id == contact_id,
                               Contact.company_id == company_id)
     )).scalar_one()
+
+    # Tanpa gudang, stok dulu tidak dipotong DAN HPP tidak diposting sama sekali —
+    # omzet tercatat tanpa modal sehingga laba terlihat jauh lebih besar dari
+    # kenyataan. Gudang kini wajib: kosong -> pakai gudang default perusahaan.
+    warehouse_id = await resolve_warehouse(db, company_id, warehouse_id)
 
     acc = await code_to_id(db, company_id)
     number = await next_number(

@@ -46,6 +46,10 @@ class UnitError(ValueError):
     """Satuan tidak dikenal / tidak valid — pesannya aman ditampilkan ke user."""
 
 
+class NoWarehouse(ValueError):
+    """Perusahaan belum punya gudang, padahal transaksi menyentuh barang."""
+
+
 def try_normalize_unit(raw: str | None) -> str | None:
     """'DUS'/'ctn' -> 'dus', 'btl'/'pcs' -> 'botol'. None bila tidak dikenal."""
     if raw is None:
@@ -140,3 +144,35 @@ def format_qty(base_qty, pack_size, *, pack_unit: str = PACK_UNIT,
     if rest or not parts:
         parts.append(f"{_trim(rest)} {base_unit}")
     return sign + " ".join(parts)
+
+
+async def resolve_warehouse(db, company_id: str, warehouse_id: str | None):
+    """Gudang yang dipakai untuk mutasi stok — WAJIB ada untuk transaksi barang.
+
+    Dulu `warehouse_id` boleh kosong dan langkah stok dilewati diam-diam,
+    sementara jurnal tetap mendebit Persediaan (pembelian) atau mencatat
+    pendapatan tanpa HPP (penjualan). Akibatnya neraca dan gudang bercerita
+    berbeda, dan laba terlihat jauh lebih besar dari kenyataan.
+
+    Sekarang: kosong -> pakai gudang default perusahaan; kalau perusahaan belum
+    punya gudang sama sekali, gagal dengan pesan yang jelas alih-alih diam.
+    """
+    from sqlalchemy import select
+
+    from ..models import Warehouse
+
+    if warehouse_id:
+        return warehouse_id
+
+    gudang = (await db.execute(
+        select(Warehouse.id)
+        .where(Warehouse.company_id == company_id)
+        .order_by(Warehouse.is_default.desc(), Warehouse.created_at)
+        .limit(1)
+    )).scalar_one_or_none()
+    if gudang is None:
+        raise NoWarehouse(
+            "Belum ada gudang. Buat gudang dulu di menu Gudang & Transfer "
+            "sebelum mencatat transaksi barang."
+        )
+    return gudang

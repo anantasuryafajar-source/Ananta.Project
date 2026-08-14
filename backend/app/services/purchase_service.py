@@ -33,7 +33,9 @@ from ..models import (
 from .journal import Line, post_journal
 from .numbering import next_number
 from .accounts_map import code_to_id
-from .units import BASE_UNIT, factor_for, to_base, try_normalize_unit
+from .units import (
+    BASE_UNIT, factor_for, resolve_warehouse, to_base, try_normalize_unit,
+)
 
 CENT = Decimal("0.01")
 QTYQ = Decimal("0.0001")
@@ -68,6 +70,12 @@ async def create_and_post_bill(
         select(Contact).where(Contact.id == contact_id,
                               Contact.company_id == company_id)
     )).scalar_one()
+
+    # Tanpa gudang, langkah stok dulu DILEWATI diam-diam padahal jurnal tetap
+    # mendebit Persediaan — neraca bilang ada barang, gudang kosong, dan valuasi
+    # stok tidak akan pernah cocok dengan saldo Persediaan. Karena itu gudang
+    # sekarang WAJIB ada untuk barang: pakai gudang default bila tidak disebut.
+    warehouse_id = await resolve_warehouse(db, company_id, warehouse_id)
 
     acc = await code_to_id(db, company_id)
     number = await next_number(

@@ -74,6 +74,8 @@ export default function PembelianPage() {
   const [contactId, setContactId] = useState("");
   const [date, setDate] = useState(today());
   const [notes, setNotes] = useState("");
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
+  const [whId, setWhId] = useState("");
   const [lines, setLines] = useState<Line[]>([baris()]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -105,6 +107,8 @@ export default function PembelianPage() {
     setOpen(true);
     api<Contact[]>("/contacts?type=supplier").then(setContacts).catch(() => {});
     api<Product[]>("/products").then(setProducts).catch(() => {});
+    api<{ id: string; name: string }[]>("/warehouses")
+      .then((w) => { setWarehouses(w); if (w[0]) setWhId(w[0].id); }).catch(() => {});
   }
 
   function setLine(i: number, patch: Partial<Line>) {
@@ -149,6 +153,7 @@ export default function PembelianPage() {
         body: JSON.stringify({
           contact_id: contactId,
           date,
+          warehouse_id: whId || null,
           notes: notes || null,
           lines: valid.map((l) => ({
             product_id: l.product_id || null,
@@ -241,6 +246,13 @@ export default function PembelianPage() {
               <Select value={contactId} onChange={(e) => setContactId(e.target.value)} required>
                 <option value="">— pilih pemasok —</option>
                 {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </Select>
+            </Field>
+            {/* Gudang WAJIB terkirim: tanpa ini stok tidak bergerak padahal
+                jurnal tetap terbentuk — neraca dan gudang jadi bercerita beda. */}
+            <Field label="Gudang">
+              <Select value={whId} onChange={(e) => setWhId(e.target.value)} required>
+                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </Select>
             </Field>
             <Field label="Tanggal">
