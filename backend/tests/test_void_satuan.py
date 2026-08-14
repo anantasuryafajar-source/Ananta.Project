@@ -162,3 +162,63 @@ async def test_hapus_permanen_membersihkan_stok_dan_jurnal(db):
     assert (await db.execute(select(Bill))).scalars().all() == []
     assert (await db.execute(select(Journal))).scalars().all() == []
     assert (await db.execute(select(StockMovement))).scalars().all() == []
+
+
+async def test_void_lalu_hapus_permanen_tidak_menyisakan_jurnal_yatim(db):
+    """REGRESI dari laporan client: laba-rugi menampilkan pendapatan NEGATIF.
+
+    Urutannya: buat faktur -> batalkan (void) -> hapus permanen. Dulu hapus
+    permanen hanya membuang jurnal ASLI, sehingga jurnal balik dari pembatalan
+    tertinggal sendirian di buku besar. Yang tersisa hanya sisi baliknya:
+    Pendapatan didebit tanpa kredit pasangannya, jadi laporan menunjukkan
+    pendapatan dan HPP bertanda minus.
+
+    Stok juga dulu dikembalikan DUA KALI (sekali oleh void, sekali oleh hapus).
+    """
+    company, wh, sup, cust, prod = await _setup(db)
+    awal = await _stok(db, prod.id)
+
+    invoice = await create_and_post_invoice(
+        db, company_id=company.id, user_id=None, contact_id=cust.id,
+        on_date=date.today(), warehouse_id=wh.id,
+        lines_in=[{"product_id": prod.id, "quantity": "2", "unit": "dus",
+                   "unit_price": "2400000"}],
+    )
+    await db.flush()
+    await void_invoice(db, company_id=company.id, user_id=None,
+                       invoice_id=invoice.id)
+    await db.flush()
+    assert await _stok(db, prod.id) == awal          # void sudah mengembalikan
+
+    await hard_delete_invoice(db, company_id=company.id, invoice_id=invoice.id)
+    await db.flush()
+
+    # tidak ada jurnal tersisa sama sekali — termasuk jurnal balik VD/...
+    assert (await db.execute(select(Journal))).scalars().all() == []
+    assert (await db.execute(select(JournalEntry))).scalars().all() == []
+    assert (await db.execute(select(StockMovement))).scalars().all() == []
+    # stok TIDAK bertambah dua kali
+    assert await _stok(db, prod.id) == awal
+
+
+async def test_void_lalu_hapus_permanen_tagihan(db):
+    """Sisi pembelian: tagihan di-void lalu dihapus permanen."""
+    company, wh, sup, _, prod = await _setup(db, stock="0", avg_cost="0")
+
+    bill = await create_and_post_bill(
+        db, company_id=company.id, user_id=None, contact_id=sup.id,
+        on_date=date.today(), warehouse_id=wh.id,
+        lines_in=[{"product_id": prod.id, "quantity": "3", "unit": "dus",
+                   "unit_cost": "1800000"}],
+    )
+    await db.flush()
+    await void_bill(db, company_id=company.id, user_id=None, bill_id=bill.id)
+    await db.flush()
+    assert await _stok(db, prod.id) == Decimal("0")
+
+    await hard_delete_bill(db, company_id=company.id, bill_id=bill.id)
+    await db.flush()
+
+    assert (await db.execute(select(Journal))).scalars().all() == []
+    assert (await db.execute(select(StockMovement))).scalars().all() == []
+    assert await _stok(db, prod.id) == Decimal("0")   # tidak jadi minus
