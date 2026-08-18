@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Truck, ClipboardList, ShoppingCart, ClipboardCheck, type LucideIcon,
+  Truck, ClipboardList, ShoppingCart, ClipboardCheck, Package, ClipboardPen,
+  type LucideIcon,
 } from "lucide-react";
 
 /**
@@ -27,7 +28,7 @@ import {
  */
 type Tab = { href: string; label: string; hint: string; icon: LucideIcon };
 
-export type GrupTab = "pembelian" | "penjualan";
+export type GrupTab = "pembelian" | "penjualan" | "produk";
 
 const GRUP: Record<GrupTab, readonly Tab[]> = {
   pembelian: [
@@ -42,6 +43,20 @@ const GRUP: Record<GrupTab, readonly Tab[]> = {
       label: "Pesanan (PO)",
       hint: "Pesanan ke supplier. Belum ada stok, utang, maupun jurnal — semua baru tercatat saat barang diterima.",
       icon: ClipboardList,
+    },
+  ],
+  produk: [
+    {
+      href: "/produk",
+      label: "Produk & Stok",
+      hint: "Master produk beserta saldo stok terkini. Angka stok di sini hanya berubah lewat transaksi atau penyesuaian.",
+      icon: Package,
+    },
+    {
+      href: "/produk/penyesuaian",
+      label: "Penyesuaian Stok",
+      hint: "Masukkan hasil hitung fisik gudang. Sistem menghitung sendiri selisihnya terhadap catatan, lalu memposting jurnalnya.",
+      icon: ClipboardPen,
     },
   ],
   penjualan: [

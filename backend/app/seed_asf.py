@@ -57,6 +57,10 @@ COA = [
     ("3-1300", "Modal - Ido", "equity", "credit"),
     ("3-2000", "Laba Ditahan", "equity", "credit"),
     ("3-3000", "Prive / Dividen", "equity", "debit"),
+    # Lawan jurnal STOK AWAL. Sengaja bukan Laba Ditahan: nilai persediaan
+    # pembuka bukan laba yang pernah dihasilkan, dan memisahkannya membuat
+    # entri pembukaan bisa ditelusuri sendiri di neraca.
+    ("3-4000", "Saldo Awal Persediaan", "equity", "credit"),
     # PENDAPATAN
     ("4-1000", "Pendapatan Penjualan", "income", "credit"),
     ("4-1100", "Retur Penjualan", "income", "debit"),
@@ -64,6 +68,9 @@ COA = [
     ("4-2000", "Pendapatan Lain", "income", "credit"),
     # HPP
     ("5-1000", "Harga Pokok Penjualan", "expense", "debit"),
+    # Lawan jurnal SELISIH OPNAME rutin. Satu akun untuk kurang maupun
+    # lebih, supaya client bisa melihat kebocoran stok bersih per periode.
+    ("5-2000", "Selisih Persediaan", "expense", "debit"),
     # BEBAN OPERASIONAL (akun riil ASF)
     ("6-1000", "Beban Gaji & Bonus", "expense", "debit"),
     ("6-1100", "Beban Komisi", "expense", "debit"),

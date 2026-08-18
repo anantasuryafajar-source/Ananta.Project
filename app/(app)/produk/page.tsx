@@ -4,7 +4,6 @@ import { Plus, Upload, Pencil, Trash2, Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { readSheet } from "@/lib/excel";
 import { rupiah } from "@/lib/format";
-import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -160,7 +159,6 @@ export default function ProdukPage() {
 
   return (
     <>
-      <Topbar title="Produk & Stok" />
       <div className="p-6">
         <div className="mb-4 flex items-center justify-end gap-2">
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
