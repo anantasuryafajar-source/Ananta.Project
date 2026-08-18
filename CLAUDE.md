@@ -51,7 +51,7 @@ Tiga permukaan, satu repo:
 | API FastAPI + SQLAlchemy 2 async | `backend/` | Railway/Render (Docker) |
 | Bot Telegram (python-telegram-bot, webhook) | `backend/app/bot/` | menempel di proses API |
 
-Domainnya spesifik: PT ASF, distributor minuman impor. CoA, 18 SKU, dan 54 customer di
+Domainnya spesifik: PT ASF, distributor minuman impor. CoA, 25 SKU, dan 54 customer di
 `app/seed_asf.py` adalah data riil dari `ASF_MASTER_DATA.xlsx`, bukan contoh generik.
 
 ### Aturan inti: jurnal adalah sumber kebenaran tunggal
@@ -185,7 +185,7 @@ Ada dua revisi dan keduanya penting:
 
 Untuk database yang sudah terisi dan akunnya ingin dipertahankan, **jangan reset**:
 `alembic upgrade head` lalu `python -m app.master_asf --terapkan` (selaraskan master
-23 produk; idempoten, tidak menghapus produk apa pun, tidak menyentuh stok/jurnal).
+25 produk; idempoten, tidak menghapus produk apa pun, tidak menyentuh stok/jurnal).
 
 Reset TOTAL (buang semua data termasuk akun pengguna — password tidak bisa dipulihkan
 karena hash Argon2, tautan bot Telegram harus dibuat ulang):

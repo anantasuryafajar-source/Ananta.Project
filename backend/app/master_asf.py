@@ -13,10 +13,10 @@ Yang dikerjakan:
    "Captain Morgan Spiced Gold") sesuai peta RENAMES, supaya tidak jadi duplikat.
 2. Memperbarui isi per dus & modal per dus ke angka yang dikonfirmasi client,
    lalu menghitung ulang modal per botol.
-3. Menambahkan produk yang belum ada (Chivas 200ml, Azul/Codigo Reposado,
-   Mansion Vodka & Whisky) dengan SKU otomatis.
+3. Menambahkan produk yang belum ada (mis. Absolut Vodka, Captain Morgan Apple, Chivas 200ml,
+   Azul/Codigo Reposado) dengan SKU otomatis.
 4. Dengan `--bersihkan`: MENGHAPUS produk di luar daftar resmi client, sehingga
-   master produk berisi tepat 23 produk. Hanya produk yang BELUM PERNAH dipakai
+   master produk berisi tepat 25 produk. Hanya produk yang BELUM PERNAH dipakai
    transaksi yang dihapus — produk berjejak faktur/tagihan/PO/SO/mutasi stok
    selalu dilewati dan dilaporkan, supaya riwayat akuntansi tidak pernah bolong.
    Biasanya dipakai sesudah `python -m app.reset_transactions`.

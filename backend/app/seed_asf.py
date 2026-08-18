@@ -81,7 +81,8 @@ COA = [
     ("6-5000", "Beban Piutang Tidak Tertagih", "expense", "debit"),
 ]
 
-# (name, modal_per_dus, isi_per_dus) — dikonfirmasi client 2026-08-13.
+# (name, modal_per_dus, isi_per_dus) — dikonfirmasi client 2026-08-13,
+# ditambah Absolut Vodka & Captain Morgan Apple pada 2026-08-18.
 #
 # PENTING: kolom modal adalah **harga per DUS**, bukan per botol. Sistem membagi
 # ke per-botol sendiri (lihat services/units.py). Salah membaca kolom ini sebagai
@@ -90,32 +91,44 @@ COA = [
 # Isi per dus: Chivas 200ml = 24, Robinson Vodka = 48, sisanya 12.
 # SKU tidak diketik siapa pun — dibuat otomatis dari nama.
 PRODUCTS = [
-    ("Chivas 200ml",                1_800_000, 24),
-    ("Robinson Vodka",              1_300_000, 48),
+    # Urutan mengikuti daftar resmi client (alfabetis) supaya bisa dicocokkan
+    # baris per baris saat client mengirim pembaruan berikutnya.
+    #
+    # Absolut Vodka bermodal 0 karena barangnya didapat GRATIS — ini angka
+    # yang benar, bukan data yang belum diisi. Jangan "diperbaiki" dengan
+    # menebak harga pasar. Akibat yang sudah diketahui & diterima client:
+    # laporan Komisi & GPM (yang memakai modal ACUAN dari master) menghitung
+    # marginnya 100%, sehingga komisi sales atas barang ini paling besar.
+    # HPP di Laba Rugi TIDAK terpengaruh — angka itu dari avg_cost hasil
+    # pembelian nyata.
+    ("Absolut Vodka",                       0, 12),
     ("Azul Reposado",              30_000_000, 12),
-    ("Codigo Reposado",             8_500_000, 12),
-    ("Mansion Vodka",               1_100_000, 12),
-    ("Mansion Whisky",              1_100_000, 12),
+    ("Captain Morgan Apple",        1_740_000, 12),
     ("Captain Morgan Spiced Gold",  1_600_000, 12),
+    ("Chivas 200ml",                1_800_000, 24),
+    ("Chivas Regal 12 YO",          3_700_000, 12),
+    ("Codigo Reposado",             8_500_000, 12),
+    ("Glenfiddich 12 YO",           5_000_000, 12),
+    ("Glenlivet 12 YO",             5_000_000, 12),
+    ("Hennessy VSOP",               7_000_000, 12),
     ("Jack Daniel's",               3_200_000, 12),
     ("Jameson",                     3_200_000, 12),
     ("Jose Cuervo",                 2_800_000, 12),
-    ("JW Red Label",                2_800_000, 12),
     # Catatan: client menyebut JW Black = 2.800.000, sama dengan JW Red.
     # Sudah dikonfirmasi lewat daftar resmi client; kalau ternyata salah ketik,
     # cukup ubah angka di baris ini lalu jalankan ulang seed.
     ("JW Black Label",              2_800_000, 12),
-    ("Chivas Regal 12 YO",          3_700_000, 12),
-    ("Martell VSOP",                6_000_000, 12),
-    ("Hennessy VSOP",               7_000_000, 12),
-    ("Glenfiddich 12 YO",           5_000_000, 12),
-    ("Singleton 12 Lucious Nectar", 4_000_000, 12),
-    ("Singleton 12 Glenord",        5_500_000, 12),
-    ("Glenlivet 12 YO",             5_000_000, 12),
-    ("Martell Noblige",             6_000_000, 12),
+    ("JW Red Label",                2_800_000, 12),
     ("Macallan 12 Double Cask",    13_500_000, 12),
-    ("Macallan 12 Triple Cask",    13_500_000, 12),
     ("Macallan 12 Sherry Oak",     14_000_000, 12),
+    ("Macallan 12 Triple Cask",    13_500_000, 12),
+    ("Mansion Vodka",               1_100_000, 12),
+    ("Mansion Whisky",              1_100_000, 12),
+    ("Martell Noblige",             6_000_000, 12),
+    ("Martell VSOP",                6_000_000, 12),
+    ("Robinson Vodka",              1_300_000, 48),
+    ("Singleton 12 Glenord",        5_500_000, 12),
+    ("Singleton 12 Lucious Nectar", 4_000_000, 12),
 ]
 
 # Customer riil hasil ekstraksi (noise seperti RETUR/SAMPLING dibuang).
