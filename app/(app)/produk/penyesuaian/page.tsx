@@ -47,7 +47,10 @@ type Preview = {
   total_value: string;
   jumlah_berubah: number;
   warnings: string[];
+  gudang_masih_kosong: boolean;
+  saran_mode: string | null;
 };
+type StockRow = { quantity: string };
 type Adjustment = {
   id: string; number: string; date: string; mode: string;
   status: string; total_value: string; notes: string | null;
@@ -69,6 +72,7 @@ export default function PenyesuaianStokPage() {
   const [catatan, setCatatan] = useState("");
   const [baris, setBaris] = useState<Baris[]>([{ ...barisKosong }]);
 
+  const [gudangKosong, setGudangKosong] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [error, setError] = useState("");
@@ -85,6 +89,24 @@ export default function PenyesuaianStokPage() {
       .catch(() => {});
     muatRiwayat();
   }, []);
+
+  /**
+   * Gudang yang belum punya stok sama sekali hampir pasti sedang diisi untuk
+   * PERTAMA kali, dan jenis yang benar untuk itu "Stok awal" — bukan bawaan
+   * "Selisih opname". Salah pilih membuat seluruh nilai persediaan pembuka
+   * muncul sebagai laba periode berjalan padahal belum ada yang terjual.
+   * Karena itu jenisnya dipilihkan di sini; user tetap bisa menggantinya.
+   */
+  useEffect(() => {
+    if (!warehouseId) return;
+    api<StockRow[]>(`/warehouses/${warehouseId}/stock`)
+      .then((rows) => {
+        const kosong = rows.every((r) => Number(r.quantity) === 0);
+        setGudangKosong(kosong);
+        if (kosong) setMode("opening");
+      })
+      .catch(() => setGudangKosong(false));
+  }, [warehouseId]);
 
   /** Setiap perubahan input membatalkan pratinjau — lihat catatan di atas. */
   function ubah(i: number, patch: Partial<Baris>) {
@@ -113,7 +135,7 @@ export default function PenyesuaianStokPage() {
       }));
   }
 
-  async function hitung() {
+  async function hitung(modeDipakai: "opening" | "opname" = mode) {
     setError(""); setSukses(""); setSibuk(true);
     try {
       setPreview(await api<Preview>("/stock-adjustments/preview", {
@@ -121,6 +143,7 @@ export default function PenyesuaianStokPage() {
         body: JSON.stringify({
           warehouse_id: warehouseId || null,
           hitungan_lengkap: lengkap,
+          mode: modeDipakai,
           lines: payloadBaris(),
         }),
       }));
@@ -170,7 +193,9 @@ export default function PenyesuaianStokPage() {
           <Field
             label="Jenis"
             hint={mode === "opening"
-              ? "Masuk ke ekuitas — tidak memengaruhi laba rugi."
+              ? (gudangKosong
+                  ? "Dipilihkan otomatis: gudang masih kosong. Masuk ke ekuitas, tidak memengaruhi laba rugi."
+                  : "Masuk ke ekuitas — tidak memengaruhi laba rugi.")
               : "Selisihnya jadi beban/pendapatan periode berjalan."}
           >
             <Select
@@ -295,7 +320,7 @@ export default function PenyesuaianStokPage() {
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button onClick={hitung} disabled={sibuk || !adaBaris}>
+          <Button onClick={() => hitung()} disabled={sibuk || !adaBaris}>
             <Calculator size={16} /> Hitung selisih
           </Button>
           <Button
@@ -321,6 +346,23 @@ export default function PenyesuaianStokPage() {
               ? "Tidak ada selisih — hitungan fisik sama dengan catatan sistem."
               : `${preview.jumlah_berubah} produk berubah. Belum ada yang disimpan.`}
           </p>
+
+          {preview.saran_mode && (
+            <div className="mt-3 rounded-[var(--radius-card)] border border-warning bg-surface-sunken p-3">
+              <p className="flex gap-2 text-sm text-ink">
+                <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" />
+                <span>{preview.saran_mode}</span>
+              </p>
+              <Button
+                variant="secondary"
+                className="mt-3"
+                onClick={() => { setMode("opening"); hitung("opening"); }}
+                disabled={sibuk}
+              >
+                Ubah ke Stok awal
+              </Button>
+            </div>
+          )}
 
           {preview.warnings.length > 0 && (
             <div className="mt-3 rounded-[var(--radius-card)] border border-line bg-surface-sunken p-3">

@@ -362,6 +362,55 @@ async def test_mutasi_stok_bertanda_dan_tertaut_ke_dokumen(db):
     assert m.ref_type == "stock_adjustment"
 
 
+# ------------------------------------------------- saran jenis dokumen
+
+async def test_gudang_kosong_menyarankan_stok_awal(db):
+    """Kekeliruan yang pernah terjadi sungguhan: pengisian pertama dicatat
+    sebagai selisih opname, sehingga seluruh nilai persediaan pembuka muncul
+    sebagai laba periode berjalan padahal belum ada barang terjual."""
+    company, wh, chivas, _ = await _setup(db)
+
+    hitung = await hitung_penyesuaian(
+        db, company_id=company.id, warehouse_id=wh.id, mode="opname",
+        lines_in=[{"product_id": chivas.id, "qty_dus": "10", "qty_botol": "0",
+                   "modal_per_dus": "1800000"}],
+    )
+    assert hitung["gudang_masih_kosong"] is True
+    assert hitung["saran_mode"] is not None
+    assert "stok awal" in hitung["saran_mode"].lower()
+    # Angkanya ikut disebut supaya besarnya dampak terlihat, bukan abstrak.
+    assert "18.000.000" in hitung["saran_mode"]
+
+
+async def test_mode_stok_awal_tidak_disarankan_ulang(db):
+    company, wh, chivas, _ = await _setup(db)
+    hitung = await hitung_penyesuaian(
+        db, company_id=company.id, warehouse_id=wh.id, mode="opening",
+        lines_in=[{"product_id": chivas.id, "qty_dus": "10", "qty_botol": "0",
+                   "modal_per_dus": "1800000"}],
+    )
+    assert hitung["saran_mode"] is None
+
+
+async def test_gudang_sudah_berisi_tidak_disarankan(db):
+    """Opname rutin di gudang yang sudah berjalan tidak boleh diganggu saran."""
+    company, wh, chivas, _ = await _setup(db)
+    await create_and_post_adjustment(
+        db, company_id=company.id, user_id=None, on_date=date.today(),
+        warehouse_id=wh.id, mode="opening",
+        lines_in=[{"product_id": chivas.id, "qty_dus": "10", "qty_botol": "0",
+                   "modal_per_dus": "1800000"}],
+    )
+    await db.commit()
+
+    hitung = await hitung_penyesuaian(
+        db, company_id=company.id, warehouse_id=wh.id, mode="opname",
+        lines_in=[{"product_id": chivas.id, "qty_dus": "9", "qty_botol": "0"}],
+    )
+    assert hitung["gudang_masih_kosong"] is False
+    assert hitung["saran_mode"] is None
+
+
 # ------------------------------------------------------------------ validasi
 
 async def test_produk_ganda_ditolak(db):

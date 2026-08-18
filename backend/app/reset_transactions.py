@@ -3,7 +3,8 @@
     python -m app.reset_transactions
 
 DIBUANG: jurnal, faktur, tagihan, pembayaran, PO/SO, biaya, kasbon, bagi hasil
-investor, ongkir kurir, mutasi & saldo stok, penomoran dokumen, audit log.
+investor, penyesuaian stok, mutasi & saldo stok, ongkir kurir, penomoran
+dokumen, audit log.
 
 TETAP UTUH: akun pengguna + role, tautan & sesi bot Telegram, riwayat chat AI,
 perusahaan, gudang, bagan akun (CoA), kontak, dan master produk.
@@ -30,6 +31,7 @@ TABLES = [
     "purchase_order_lines", "purchase_orders",
     "sales_order_lines", "sales_orders",
     "courier_expenses", "investor_payouts", "expenses", "employee_loans",
+    "stock_adjustment_lines", "stock_adjustments",
     "stock_movements", "stock_levels",
     "document_sequences", "audit_logs",
 ]

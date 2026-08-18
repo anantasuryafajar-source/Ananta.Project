@@ -84,7 +84,7 @@ async def preview_adjustment(
         hasil = await hitung_penyesuaian(
             db, company_id=user.company_id, warehouse_id=warehouse_id,
             lines_in=[l.model_dump() for l in body.lines],
-            hitungan_lengkap=body.hitungan_lengkap,
+            hitungan_lengkap=body.hitungan_lengkap, mode=body.mode,
         )
     except (PenyesuaianError, NoWarehouse) as e:
         await db.rollback()

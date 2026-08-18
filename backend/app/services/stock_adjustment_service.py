@@ -16,8 +16,10 @@ DUA MODE - perbedaannya menentukan benar-tidaknya laba rugi:
 
 Mencatat stok awal sebagai selisih opname membuat laba periode pertama melonjak
 atau anjlok sebesar seluruh nilai persediaan pembuka - padahal tidak ada
-untung/rugi apa pun yang terjadi. Karena itu modenya wajib dipilih, bukan
-ditebak sistem.
+untung/rugi apa pun yang terjadi. Karena itu mode dipilih user, bukan
+ditentukan sistem - tetapi bila gudang masih benar-benar kosong, pratinjau
+MEMPERINGATKAN bahwa ini tampaknya stok awal. Menyarankan, bukan memaksa:
+gudang yang sempat kosong lalu diisi ulang tetap sah sebagai opname.
 
 PRODUK YANG TIDAK TERCANTUM tidak disentuh, kecuali `hitungan_lengkap=True`
 yang secara eksplisit menganggapnya habis. Bawaan ini disengaja: daftar hitung
@@ -76,6 +78,11 @@ def _qn(v) -> Decimal:
     return Decimal(str(v)).quantize(QTYQ)
 
 
+def _rupiah(v: Decimal) -> str:
+    """'27825000.00' -> 'Rp 27.825.000'. Hanya untuk teks peringatan."""
+    return "Rp " + f"{v:,.0f}".replace(",", ".")
+
+
 def _dec(v, nama: str) -> Decimal:
     try:
         return Decimal(str(v or 0))
@@ -83,9 +90,23 @@ def _dec(v, nama: str) -> Decimal:
         raise PenyesuaianError(f"{nama} bukan angka yang sah.") from None
 
 
+async def gudang_masih_kosong(db: AsyncSession, warehouse_id: str) -> bool:
+    """True bila gudang belum punya satu pun saldo stok.
+
+    Dipakai untuk menebak apakah hitungan ini pengisian PERTAMA. Menebak saja,
+    tidak memaksa: user tetap yang memilih modenya.
+    """
+    ada = (await db.execute(
+        select(StockLevel.id).where(StockLevel.warehouse_id == warehouse_id,
+                                    StockLevel.quantity != 0).limit(1)
+    )).scalar_one_or_none()
+    return ada is None
+
+
 async def hitung_penyesuaian(
     db: AsyncSession, *, company_id: str, warehouse_id: str,
     lines_in: list[dict], hitungan_lengkap: bool = False,
+    mode: str | None = None,
 ) -> dict:
     """Hitung selisih tanpa menyimpan apa pun.
 
@@ -149,11 +170,32 @@ async def hitung_penyesuaian(
         f"modalnya Rp 0 - bila terjual, HPP-nya nol dan labanya terlihat 100%."
         for b in hasil if b["qty_diff"] > 0 and b["unit_cost"] == 0
     ]
+    # Kekeliruan yang paling mahal di fitur ini: pengisian PERTAMA dicatat
+    # sebagai selisih opname, sehingga seluruh nilai persediaan pembuka muncul
+    # sebagai laba/rugi periode berjalan padahal belum ada satu pun barang
+    # terjual. Disampaikan lewat field TERPISAH, bukan `warnings`, supaya
+    # tampilan bisa menawarkan tombol koreksi sekali klik - peringatan yang
+    # bisa langsung ditindaklanjuti jauh lebih mungkin dibaca.
+    #
+    # Menyarankan, bukan melarang: gudang yang kebetulan sempat kosong lalu
+    # diisi ulang tetap sah dicatat sebagai opname.
+    kosong = await gudang_masih_kosong(db, warehouse_id)
+    saran = None
+    if kosong and mode == "opname" and total_nilai != 0:
+        saran = (
+            "Gudang ini belum punya stok sama sekali, jadi hitungan ini "
+            "tampaknya pengisian stok awal. Dengan jenis 'Selisih opname', "
+            f"nilai {_rupiah(total_nilai)} akan tercatat sebagai laba periode "
+            "berjalan padahal belum ada barang yang terjual."
+        )
+
     return {
         "lines": hasil,
         "total_value": total_nilai,
         "jumlah_berubah": sum(1 for b in hasil if b["qty_diff"] != 0),
         "warnings": peringatan,
+        "gudang_masih_kosong": kosong,
+        "saran_mode": saran,
     }
 
 
@@ -251,7 +293,7 @@ async def create_and_post_adjustment(
     warehouse_id = await resolve_warehouse(db, company_id, warehouse_id)
     hitung = await hitung_penyesuaian(
         db, company_id=company_id, warehouse_id=warehouse_id,
-        lines_in=lines_in, hitungan_lengkap=hitungan_lengkap,
+        lines_in=lines_in, hitungan_lengkap=hitungan_lengkap, mode=mode,
     )
     if hitung["jumlah_berubah"] == 0:
         raise PenyesuaianError(

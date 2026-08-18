@@ -25,14 +25,18 @@ class LineIn(BaseModel):
 class PreviewIn(BaseModel):
     warehouse_id: str | None = None
     hitungan_lengkap: bool = False
+    # opening = stok awal (lawan jurnal ekuitas)
+    # opname  = selisih hitung rutin (lawan jurnal beban)
+    #
+    # Ikut dikirim saat PRATINJAU supaya sistem bisa memperingatkan bila gudang
+    # masih kosong tetapi jenisnya dipilih "opname" - kekeliruan yang membuat
+    # seluruh nilai persediaan pembuka muncul sebagai laba periode berjalan.
+    mode: str = "opname"
     lines: list[LineIn] = []
 
 
 class AdjustmentIn(PreviewIn):
     date: date
-    # opening = stok awal (lawan jurnal ekuitas)
-    # opname  = selisih hitung rutin (lawan jurnal beban)
-    mode: str = "opname"
     notes: str | None = None
 
 
@@ -60,8 +64,15 @@ class PreviewOut(BaseModel):
     total_value: Decimal
     jumlah_berubah: int
     # Peringatan yang TIDAK menghalangi penyimpanan, mis. barang bertambah
-    # tetapi modalnya nol.
+    # tetapi modalnya nol, atau jenis dokumen tampaknya keliru.
     warnings: list[str] = []
+    # Gudang belum punya saldo stok sama sekali -> kemungkinan besar ini
+    # pengisian stok awal. Dipakai frontend untuk menyarankan jenisnya.
+    gudang_masih_kosong: bool = False
+    # Terisi bila jenis dokumen tampaknya keliru (gudang kosong tapi dipilih
+    # "opname"). Terpisah dari `warnings` supaya tampilan bisa menyertakan
+    # tombol koreksi sekali klik.
+    saran_mode: str | None = None
 
 
 class LineOut(BaseModel):
