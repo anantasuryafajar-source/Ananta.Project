@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Search, CornerDownLeft } from "lucide-react";
-import { NAV } from "@/lib/nav";
+import { NAV, PENCARIAN } from "@/lib/nav";
 
 /**
  * Command palette: tekan Ctrl/Cmd+K dari mana saja untuk melompat cepat
@@ -41,7 +41,14 @@ export function CommandPalette() {
   const results = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return NAV;
-    return NAV.filter((n) => n.label.toLowerCase().includes(t));
+    // Saat mengetik, cari di PENCARIAN (menu + pintasan) dan ikut cocokkan
+    // kata kunci alias — supaya "purchase order" tetap ketemu walau menunya
+    // sekarang bernama "Pembelian".
+    return PENCARIAN.filter(
+      (n) =>
+        n.label.toLowerCase().includes(t) ||
+        (n.kata ?? []).some((k) => k.includes(t))
+    );
   }, [q]);
 
   useEffect(() => { setActive(0); }, [q]);

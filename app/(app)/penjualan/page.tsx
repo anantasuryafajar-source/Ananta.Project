@@ -4,7 +4,6 @@ import { Plus, Trash2, Printer, Truck, Search, Ban, Wallet } from "lucide-react"
 import { api } from "@/lib/api";
 import { printInvoiceDoc, printDeliveryNote, type InvoiceDetail, type CompanyInfo } from "@/lib/print";
 import { rupiah, tanggal } from "@/lib/format";
-import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -255,7 +254,6 @@ export default function PenjualanPage() {
 
   return (
     <>
-      <Topbar title="Penjualan" />
       <div className="p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 rounded-[var(--radius-input)] border border-line bg-surface px-3 py-1.5">

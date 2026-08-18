@@ -3,7 +3,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Plus, Trash2, PackageCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { rupiah, tanggal } from "@/lib/format";
-import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -110,7 +109,6 @@ export default function PurchaseOrdersPage() {
 
   return (
     <>
-      <Topbar title="Purchase Order" />
       <div className="p-6">
         <div className="mb-4 flex justify-end">
           <Button onClick={buka}><Plus size={16} /> Buat PO</Button>
