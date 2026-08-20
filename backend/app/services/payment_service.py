@@ -67,6 +67,11 @@ async def receive_payment(
     if Decimal(str(invoice.paid_total)) >= Decimal(str(invoice.total)):
         invoice.status = "paid"
     await db.flush()
+
+    # Tandai termin yang tertutup, kalau faktur ini punya jadwal. Faktur lama
+    # tanpa jadwal dilewati tanpa error.
+    from .terms_service import settle_terms
+    await settle_terms(db, invoice_id=invoice.id, amount=amount)
     return pay
 
 

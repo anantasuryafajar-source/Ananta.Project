@@ -22,25 +22,47 @@ def _f(v) -> str:
 
 async def _balances(db: AsyncSession, company_id: str,
                     start: date | None, end: date | None):
-    """Saldo (debit - kredit) per akun dalam rentang tanggal."""
+    """Saldo (debit - kredit) per akun dalam rentang tanggal.
+
+    Penyaringan tanggal WAJIB terjadi sebelum penjumlahan, bukan di klausa ON
+    sebuah LEFT JOIN. Versi lama menaruh `Journal.date >= start` di ON-nya
+    outer join ke `journals`; karena penjumlahannya mengambil
+    `JournalEntry.debit` yang sudah ikut lewat join sebelumnya, baris di luar
+    periode TIDAK terbuang — kolom `journals` cuma jadi NULL sementara
+    nominalnya tetap terjumlah. Akibatnya setiap periode Laba Rugi menampilkan
+    angka SEUMUR HIDUP perusahaan, dan `as_of` di Neraca/Neraca Saldo juga
+    diabaikan. Bentuk subquery di bawah membuang barisnya lewat WHERE, jadi
+    filternya benar-benar berlaku.
+    """
     conds = [Journal.company_id == company_id]
     if start:
         conds.append(Journal.date >= start)
     if end:
         conds.append(Journal.date <= end)
+
+    agg = (
+        select(
+            JournalEntry.account_id.label("account_id"),
+            func.coalesce(func.sum(JournalEntry.debit), 0).label("d"),
+            func.coalesce(func.sum(JournalEntry.credit), 0).label("c"),
+        )
+        .select_from(JournalEntry)
+        .join(Journal, Journal.id == JournalEntry.journal_id)
+        .where(and_(*conds))
+        .group_by(JournalEntry.account_id)
+        .subquery()
+    )
+
     stmt = (
         select(
             Account.id, Account.code, Account.name, Account.type,
             Account.normal_balance,
-            func.coalesce(func.sum(JournalEntry.debit), 0).label("d"),
-            func.coalesce(func.sum(JournalEntry.credit), 0).label("c"),
+            func.coalesce(agg.c.d, 0).label("d"),
+            func.coalesce(agg.c.c, 0).label("c"),
         )
         .select_from(Account)
-        .join(JournalEntry, JournalEntry.account_id == Account.id, isouter=True)
-        .join(Journal, and_(Journal.id == JournalEntry.journal_id, *conds), isouter=True)
+        .join(agg, agg.c.account_id == Account.id, isouter=True)
         .where(Account.company_id == company_id)
-        .group_by(Account.id, Account.code, Account.name, Account.type,
-                  Account.normal_balance)
         .order_by(Account.code)
     )
     rows = (await db.execute(stmt)).all()
@@ -135,6 +157,18 @@ async def trial_balance(db: AsyncSession, company_id: str, as_of: date) -> dict:
 
 
 async def ar_aging(db: AsyncSession, company_id: str, as_of: date) -> dict:
+    """Umur piutang, dihitung dari JADWAL TERMIN kalau fakturnya punya.
+
+    Faktur dengan kesepakatan "tagih saat order berikutnya" tidak punya tanggal
+    jatuh tempo. Kalau ia diperlakukan seperti faktur biasa (umur dihitung dari
+    tanggal faktur), ia akan tampil menunggak 90+ hari padahal itu justru yang
+    disepakati — dan orang akan menagih customer yang tidak terlambat. Karena
+    itu termin tanpa tanggal masuk ember sendiri: `tanpa_tempo`.
+
+    Faktur lama yang belum punya jadwal termin tetap dihitung dengan cara lama
+    (`due_date` faktur), jadi tidak ada angka historis yang bergeser.
+    """
+    from ..models import InvoiceTerm
     stmt = (
         select(Invoice, Contact.name)
         .join(Contact, Contact.id == Invoice.contact_id)
@@ -143,31 +177,68 @@ async def ar_aging(db: AsyncSession, company_id: str, as_of: date) -> dict:
         .order_by(Invoice.date)
     )
     rows = (await db.execute(stmt)).all()
-    buckets = {"current": Z, "d1_30": Z, "d31_60": Z, "d61_90": Z, "d90_plus": Z}
+
+    inv_ids = [inv.id for inv, _ in rows]
+    terms_by_inv: dict[str, list] = {}
+    if inv_ids:
+        for t in (await db.execute(
+            select(InvoiceTerm).where(InvoiceTerm.invoice_id.in_(inv_ids))
+            .order_by(InvoiceTerm.sequence)
+        )).scalars().all():
+            terms_by_inv.setdefault(t.invoice_id, []).append(t)
+
+    buckets = {"current": Z, "d1_30": Z, "d31_60": Z, "d61_90": Z,
+               "d90_plus": Z, "tanpa_tempo": Z}
     items = []
+
+    def _bucket(age: int) -> str:
+        if age <= 0:
+            return "current"
+        if age <= 30:
+            return "d1_30"
+        if age <= 60:
+            return "d31_60"
+        if age <= 90:
+            return "d61_90"
+        return "d90_plus"
+
     for inv, cname in rows:
         outstanding = Decimal(str(inv.total)) - Decimal(str(inv.paid_total))
         if outstanding <= 0:
             continue
-        ref = inv.due_date or inv.date
-        age = (as_of - ref).days
-        if age <= 0:
-            b = "current"
-        elif age <= 30:
-            b = "d1_30"
-        elif age <= 60:
-            b = "d31_60"
-        elif age <= 90:
-            b = "d61_90"
-        else:
-            b = "d90_plus"
-        buckets[b] += outstanding
-        items.append({
-            "number": inv.number, "contact": cname,
-            "date": inv.date.isoformat(),
-            "due_date": inv.due_date.isoformat() if inv.due_date else None,
-            "age_days": age, "bucket": b, "outstanding": _f(outstanding),
-        })
+
+        jadwal = terms_by_inv.get(inv.id)
+        if not jadwal:
+            ref = inv.due_date or inv.date
+            age = (as_of - ref).days
+            b = _bucket(age)
+            buckets[b] += outstanding
+            items.append({
+                "number": inv.number, "contact": cname,
+                "date": inv.date.isoformat(),
+                "due_date": inv.due_date.isoformat() if inv.due_date else None,
+                "age_days": age, "bucket": b, "outstanding": _f(outstanding),
+            })
+            continue
+
+        for t in jadwal:
+            sisa = Decimal(str(t.amount)) - Decimal(str(t.settled_amount))
+            if sisa <= 0:
+                continue
+            if t.due_date is None:
+                b, age = "tanpa_tempo", None
+            else:
+                age = (as_of - t.due_date).days
+                b = _bucket(age)
+            buckets[b] += sisa
+            items.append({
+                "number": inv.number, "contact": cname,
+                "date": inv.date.isoformat(),
+                "due_date": t.due_date.isoformat() if t.due_date else None,
+                "term_kind": t.kind, "term_sequence": t.sequence,
+                "age_days": age, "bucket": b, "outstanding": _f(sisa),
+            })
+
     total = sum(buckets.values(), Z)
     return {
         "as_of": as_of.isoformat(),

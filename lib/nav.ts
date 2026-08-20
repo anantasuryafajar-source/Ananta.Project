@@ -2,6 +2,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, Truck, Wallet,
   BookOpen, Users, FileBarChart, Settings, Warehouse, Bike,
   ClipboardList, ClipboardCheck, PiggyBank, Receipt, Landmark, Sparkles,
+  HandCoins, Coins,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,6 +52,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: "/kas-bank", label: "Kas & Bank", icon: Wallet, kata: ["uang", "saldo", "bayar", "terima"] },
       { href: "/biaya", label: "Biaya Operasional", icon: Receipt, kata: ["pengeluaran", "beban", "ongkos"] },
+      { href: "/komisi", label: "Komisi", icon: HandCoins, kata: ["sales", "bonus", "fee", "perantara"] },
+      { href: "/uang-muka", label: "Uang Muka", icon: Coins, kata: ["dp", "down payment", "titipan", "advance"] },
       { href: "/investor", label: "Investor", icon: PiggyBank, kata: ["modal", "setoran", "pemilik"] },
       { href: "/akuntansi", label: "Akuntansi", icon: BookOpen, kata: ["jurnal", "buku besar", "coa", "akun"] },
       { href: "/rekonsiliasi", label: "Rekonsiliasi Bank", icon: Landmark, kata: ["cocokkan", "mutasi bank"] },

@@ -11,16 +11,16 @@ import { rupiah } from "@/lib/format";
 
 type Row = { code?: string; name: string; amount: string };
 type PL = { income: Row[]; expense: Row[]; total_income: string; total_expense: string; net_profit: string };
-type Aging = { buckets: Record<string, string>; total: string; items: { number: string; contact: string; age_days: number; outstanding: string }[] };
+type Aging = { buckets: Record<string, string>; total: string; items: { number: string; contact: string; age_days: number | null; term_kind?: string; term_sequence?: number; outstanding: string }[] };
 type Stock = { items: { sku: string; name: string; quantity: string; qty_display: string; avg_cost: string; value: string }[]; total_value: string };
 type Cashflow = { months: { month: string; in: string; out: string; net: string }[]; total_in: string; total_out: string; net: string };
 type Quarterly = { items: { quarter: string; omzet: string; hpp: string; gross_profit: string }[] };
 type ArLimit = { items: { customer: string; outstanding: string; credit_limit: string; ratio: number | null; status: string }[]; total_outstanding: string };
 type Commission = { rate: number; items: { sku: string; name: string; qty: string; revenue: string; margin: string; commission: string }[]; total_commission: string };
 
-const TABS = ["Laba Rugi", "Arus Kas", "Rekap Kuartal", "AR Aging", "AR Limit", "Komisi", "GPM", "Valuasi Stok", "Kartu Piutang", "KPI Sales", "PPN/PPh"] as const;
+const TABS = ["Laba Rugi", "Arus Kas", "Rekap Kuartal", "AR Aging", "AR Limit", "Simulasi Komisi", "GPM", "Valuasi Stok", "Kartu Piutang", "KPI Sales", "PPN/PPh"] as const;
 type Tab = (typeof TABS)[number];
-const withDate = new Set<Tab>(["Laba Rugi", "Arus Kas", "Komisi", "GPM", "KPI Sales", "PPN/PPh"]);
+const withDate = new Set<Tab>(["Laba Rugi", "Arus Kas", "Simulasi Komisi", "GPM", "KPI Sales", "PPN/PPh"]);
 type Gpm = { by_sku: { sku: string; name: string; revenue: string; margin: string; gpm: number | null }[]; by_customer: { customer: string; revenue: string; margin: string; gpm: number | null }[] };
 type Statement = { customer: string | null; entries: { date: string; ref: string; type: string; debit: string; credit: string; balance: string }[]; balance: string };
 type SalesKpi = { items: { sales: string; invoices: number; omzet: string; paid: string; collection_pct: number | null }[] };
@@ -62,7 +62,7 @@ export default function LaporanPage() {
         "Rekap Kuartal": `/reports/quarterly-recap`,
         "AR Aging": `/reports/ar-aging?as_of=${end}`,
         "AR Limit": `/reports/ar-limit`,
-        "Komisi": `/reports/commission?start=${start}&end=${end}`,
+        "Simulasi Komisi": `/reports/commission?start=${start}&end=${end}`,
         "GPM": `/reports/gpm?start=${start}&end=${end}`,
         "Valuasi Stok": `/reports/stock-valuation`,
         "Kartu Piutang": `/reports/customer-statement?contact_id=${contactId}`,
@@ -122,7 +122,7 @@ export default function LaporanPage() {
         {!loading && data && dataTab === tab && tab === "Rekap Kuartal" && <QuarterlyView q={data as Quarterly} />}
         {!loading && data && dataTab === tab && tab === "AR Aging" && <ArAging aging={data as Aging} />}
         {!loading && data && dataTab === tab && tab === "AR Limit" && <ArLimitView a={data as ArLimit} />}
-        {!loading && data && dataTab === tab && tab === "Komisi" && <CommissionView c={data as Commission} />}
+        {!loading && data && dataTab === tab && tab === "Simulasi Komisi" && <CommissionView c={data as Commission} />}
         {!loading && data && dataTab === tab && tab === "GPM" && <GpmView g={data as Gpm} />}
         {!loading && data && dataTab === tab && tab === "Valuasi Stok" && <StockVal stock={data as Stock} />}
         {!loading && tab === "Kartu Piutang" && !contactId && (
@@ -225,8 +225,8 @@ function CommissionView({ c }: { c: Commission }) {
   return (
     <Card>
       <div className="mb-2 flex justify-between text-sm">
-        <span className="font-medium text-ink">Komisi per SKU (rate {(c.rate * 100).toFixed(0)}% dari margin)</span>
-        <span className="tabular-nums text-ink">Total komisi: {rupiah(c.total_commission)}</span>
+        <span className="font-medium text-ink">Simulasi komisi per SKU (rate {(c.rate * 100).toFixed(0)}% dari margin)</span>
+        <span className="tabular-nums text-ink">Total simulasi: {rupiah(c.total_commission)}</span>
       </div>
       <table className="w-full text-sm">
         <thead><tr className="text-left text-caption uppercase text-ink-subtle">
@@ -328,10 +328,11 @@ function Section({ title, rows }: { title: string; rows: Row[] }) {
   );
 }
 function ArAging({ aging }: { aging: Aging }) {
-  const labels: Record<string, string> = { current: "Belum jatuh tempo", d1_30: "1–30 hari", d31_60: "31–60 hari", d61_90: "61–90 hari", d90_plus: "> 90 hari" };
+  const labels: Record<string, string> = { current: "Belum jatuh tempo", d1_30: "1–30 hari", d31_60: "31–60 hari", d61_90: "61–90 hari", d90_plus: "> 90 hari", tanpa_tempo: "Tanpa jatuh tempo" };
+  const kindLabels: Record<string, string> = { tunai: "tunai", dp: "DP", tempo: "tempo", po_berikutnya: "PO berikutnya", custom: "custom" };
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
         {Object.entries(aging.buckets).map(([k, v]) => (
           <Card key={k}>
             <p className="text-caption text-ink-subtle">{labels[k] ?? k}</p>
@@ -345,7 +346,7 @@ function ArAging({ aging }: { aging: Aging }) {
           <span className="tabular-nums text-ink">Total: {rupiah(aging.total)}</span>
         </div>
         <table className="w-full text-sm">
-          <thead><tr className="text-left text-caption uppercase text-ink-subtle"><th className="py-1">No.</th><th>Customer</th><th className="text-right">Umur</th><th className="text-right">Outstanding</th></tr></thead>
+          <thead><tr className="text-left text-caption uppercase text-ink-subtle"><th className="py-1">No.</th><th>Customer</th><th>Termin</th><th className="text-right">Umur</th><th className="text-right">Outstanding</th></tr></thead>
           <tbody>
             {aging.items.map((it) => (
               <tr key={it.number} className="border-t border-line">
@@ -459,13 +460,13 @@ function tableFor(tab: string, data: any): Tabular {
       return { title: "Rekap Kuartal", headers: ["Kuartal", "Omzet", "HPP", "Laba Kotor"],
         rows: (data.items ?? []).map((i: any) => [i.quarter, i.omzet, i.hpp, i.gross_profit]) };
     case "AR Aging":
-      return { title: "AR Aging", headers: ["No.", "Customer", "Umur (hari)", "Outstanding"],
-        rows: (data.items ?? []).map((i: any) => [i.number, i.contact, i.age_days, i.outstanding]) };
+      return { title: "AR Aging", headers: ["No.", "Customer", "Termin", "Umur (hari)", "Outstanding"],
+        rows: (data.items ?? []).map((i: any) => [i.number, i.contact, i.term_kind ?? "", i.age_days ?? "", i.outstanding]) };
     case "AR Limit":
       return { title: "AR Limit", headers: ["Customer", "Outstanding", "Limit", "Status"],
         rows: (data.items ?? []).map((i: any) => [i.customer, i.outstanding, i.credit_limit, i.status]) };
-    case "Komisi":
-      return { title: "Komisi", headers: ["SKU", "Produk", "Qty", "Omzet", "Margin", "Komisi"],
+    case "Simulasi Komisi":
+      return { title: "Simulasi Komisi", headers: ["SKU", "Produk", "Qty", "Omzet", "Margin", "Simulasi Komisi"],
         rows: (data.items ?? []).map((i: any) => [i.sku, i.name, i.qty, i.revenue, i.margin, i.commission]) };
     case "GPM":
       return { title: "GPM per SKU", headers: ["SKU", "Produk", "Omzet", "Margin", "GPM%"],

@@ -1,16 +1,5 @@
 """Endpoint Asisten AI web. Mount di /api/v1/ai/...
 
-<<<<<<< HEAD
-- POST   /ai/chat                       kirim pesan (+mode), dapat balasan (+persist)
-- GET    /ai/conversations              daftar percakapan pengguna
-- GET    /ai/conversations/{id}/messages   isi satu percakapan
-- DELETE /ai/conversations/{id}         hapus percakapan
-- GET    /ai/config                     daftar model, effort & MODE untuk dropdown
-
-Frontend tinggal kirim:  {"message": "...", "mode": "marketing"}
-Kalau mode tidak dikirim (atau "auto"), backend melakukan Intent Detection dan
-mengembalikan mode terpilih di respons ({"mode": "...", "mode_detected": true}).
-=======
 Slash command PROFILING 2.0:
     /profiling Nama Lengkap
     /profling Nama Lengkap                  # alias salah ketik
@@ -18,7 +7,6 @@ Slash command PROFILING 2.0:
 
 Hasil profiling masuk ke percakapan yang sama dan tersimpan sebagai AiMessage.
 Tidak diperlukan halaman atau menu sidebar terpisah.
->>>>>>> 30a7ae8a802df3762ef70adc784e73469dfd32a8
 """
 from datetime import datetime, timezone
 
@@ -31,15 +19,12 @@ from ..core.database import get_db
 from ..deps import require_roles
 from ..models import AiConversation, AiMessage, User
 from ..services import ai
-<<<<<<< HEAD
-=======
 from ..services import profiling
 from ..services.profiling_command import (
     parse_profiling_command,
     profiling_reply,
     profiling_usage,
 )
->>>>>>> 30a7ae8a802df3762ef70adc784e73469dfd32a8
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -47,13 +32,8 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 class ChatIn(BaseModel):
     conversation_id: str | None = None
     message: str
-<<<<<<< HEAD
-    mode: str | None = None    # "general"|"marketing"|... ; None/"auto" = intent detection
-    model: str | None = None   # None/"auto" = model router pilih per mode
-=======
     mode: str | None = None
     model: str | None = None
->>>>>>> 30a7ae8a802df3762ef70adc784e73469dfd32a8
     effort: str | None = None
     attachments: list[dict] | None = None
 
@@ -255,10 +235,6 @@ async def chat(
         attachments=att_blocks or None,
     )
 
-<<<<<<< HEAD
-    # Simpan balasan
-=======
->>>>>>> 30a7ae8a802df3762ef70adc784e73469dfd32a8
     db.add(AiMessage(conversation_id=conv.id, role="assistant", content=result.reply))
     conv.updated_at = datetime.now(timezone.utc)
     await db.commit()

@@ -94,7 +94,16 @@ async def ar_limit(db: AsyncSession, company_id: str) -> dict:
 # ------------------------------------------------------------ KOMISI PER-SKU
 async def commission(db: AsyncSession, company_id: str, start: date, end: date,
                      rate: float = 0.05) -> dict:
-    """Komisi berbasis margin per SKU (modal dari purchase_price, seperti sheet KOMISI).
+    """SIMULASI komisi berbasis margin per SKU — BUKAN komisi yang sebenarnya.
+
+    Fungsi ini mengalikan satu rate ke SEMUA SKU di semua faktur, sedangkan
+    aturan client: komisi hanya berlaku di kasus tertentu dan nilainya
+    beda-beda per kesepakatan. Angka komisi yang sah ada di tabel
+    `sales_commissions` (lihat services/commission_service.py) dan hanya yang
+    berstatus "dibayar" yang muncul di Laba Rugi. Yang di sini dipertahankan
+    sebagai alat bantu perkiraan — di UI dilabeli "Simulasi Komisi" — jadi
+    jangan pernah memakainya untuk membayar orang atau mencocokkan Laba Rugi.
+
     commission = (harga_jual - modal) * qty * rate.
 
     SATUAN: omzet dihitung dari `qty_input` x `unit_price` (keduanya dalam satuan

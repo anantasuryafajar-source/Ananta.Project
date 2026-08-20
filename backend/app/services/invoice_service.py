@@ -47,7 +47,21 @@ async def create_and_post_invoice(
     db: AsyncSession, *, company_id: str, user_id: str | None,
     contact_id: str, on_date: date, warehouse_id: str | None,
     lines_in: list[dict], notes: str | None = None,
+    terms: list[dict] | None = None,
 ) -> Invoice:
+    """Faktur penjualan: jurnal pendapatan + HPP + potong stok, atomik.
+
+    `terms` = jadwal pembayaran (lihat services/terms_service.py). Kalau tidak
+    diisi, dibuatkan jadwal satu termin dari `Contact.payment_term_days` —
+    setiap faktur SELALU punya jadwal, jadi AR Aging tidak pernah perlu menebak
+    dari tanggal faktur.
+
+    PENTING: jadwal termin TIDAK boleh mengubah jurnal di bawah. Tunai, tempo,
+    DP, atau tagih-di-PO-berikutnya menghasilkan jurnal faktur yang persis
+    sama; yang berbeda hanya bagaimana piutangnya ditutup kemudian. Kalau suatu
+    saat fungsi ini bercabang berdasarkan cara bayar, Laba Rugi berhenti bisa
+    dipercaya.
+    """
     contact = (await db.execute(
         select(Contact).where(Contact.id == contact_id,
                               Contact.company_id == company_id)
@@ -175,5 +189,13 @@ async def create_and_post_invoice(
         ))
 
     await db.flush()
+
+    # --- Jadwal termin (tidak menyentuh jurnal apa pun) ---
+    from .terms_service import set_terms, default_terms
+    await set_terms(
+        db, invoice_id=invoice.id,
+        terms=terms or default_terms(total, on_date, contact.payment_term_days or 0),
+    )
+
     invoice.stock_warnings = stock_warnings  # atribut sementara (tidak disimpan ke DB)
     return invoice

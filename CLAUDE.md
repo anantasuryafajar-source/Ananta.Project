@@ -69,7 +69,12 @@ Ini invarian terpenting sistem. Jangan langgar.
    update average cost). Modul baru mengikuti pola ini.
 3. **Laporan tidak boleh menyimpan angka.** `services/reports.py` dan `reports_ext.py`
    menghitung ulang dari `journal_entries` setiap kali dipanggil. Jangan tambah kolom
-   agregat/cache saldo.
+   agregat/cache saldo. Di `reports._balances`, penyaringan tanggal HARUS terjadi di
+   subquery sebelum penjumlahan — pernah salah dipasang di klausa `ON` sebuah
+   `LEFT JOIN` ke `journals`, dan karena nominalnya diambil dari `JournalEntry` yang
+   sudah ikut lewat join sebelumnya, baris di luar periode tidak terbuang: setiap
+   periode Laba Rugi menampilkan angka seumur hidup perusahaan dan `as_of` di
+   Neraca diabaikan. Diperbaiki 2026-08-20.
 4. **Transaksi terposting tidak dihapus.** `services/void_service.py` membuat jurnal balik
    + mutasi stok balik dan menandai status `void`, agar jejak audit utuh.
 5. **Uang selalu `Decimal` + `Numeric(18,2)`** (`Money` di `models/base.py`), kuantitas
@@ -124,12 +129,95 @@ Tes penjaga aturan ini: `tests/test_unit_conversion.py` — termasuk
 `test_valuasi_stok_cocok_dengan_saldo_persediaan_di_jurnal`. Kalau file itu gagal,
 jangan lanjut — angka akuntansinya sedang salah.
 
-**Terbuka & menunggu keputusan client (per 2026-08-13):** `reports_ext.commission`
-dan `reports_ext.gpm` menghitung modal dari `Product.purchase_price` (modal ACUAN
-dari master ÷ isi dus), sementara HPP di laba-rugi memakai `avg_cost` NYATA. Jadi
-margin di dua laporan itu bisa berbeda untuk penjualan yang sama — perilaku lama
-yang sengaja mengikuti sheet KOMISI client. Jangan "perbaiki" sepihak: angkanya
-menentukan komisi sales. Client belum membahas ini.
+### Aturan ketiga: komisi adalah kesepakatan internal, bukan bagian dari harga
+
+Diputuskan client 2026-08-20. Tiga aturannya saling mengunci — melanggar satu
+merusak dua yang lain. Penjaganya `tests/test_commission.py`.
+
+1. **Komisi hanya berlaku di kasus tertentu dan nilainya beda-beda.** Karena itu
+   TIDAK ada rate global dan tidak ada perhitungan otomatis: `SalesCommission.amount`
+   diketik per kasus dan itulah sumber kebenarannya. `basis`/`rate` cuma catatan
+   cara menghitungnya waktu itu. Jangan bikin fitur "hitung ulang komisi dari
+   master" — modal master berubah, angka kesepakatan lama ikut bergeser.
+2. **Komisi tidak boleh muncul di faktur.** Faktur adalah dokumen yang dilihat
+   customer dan harganya harus harga sebenarnya. Karena itu komisi ada di tabel
+   `sales_commissions` sendiri, bukan kolom di `invoices`/`invoice_lines`. Dua
+   jalur kebocoran yang harus dijaga: markup diam-diam di `unit_price`, dan
+   komisi dititipkan ke `discount`.
+3. **Komisi diakui saat NILAINYA DISEPAKATI** — basis AKRUAL, dua jurnal:
+   `create_commission()` memposting `Dr 6-1100 Beban Komisi / Cr 2-1600 Utang
+   Komisi` (ini yang masuk Laba Rugi), lalu `pay_commission()` memposting
+   `Dr 2-1600 / Cr Kas-Bank` (neraca saja). `pay_commission` TIDAK BOLEH
+   mendebit 6-1100 — kalau itu terjadi, komisinya terhitung dua kali.
+   Titik pengakuannya "saat disepakati" dan bukan "saat faktur terbit" karena
+   nilainya sering belum diketahui waktu faktur keluar, dan angka yang belum ada
+   tidak bisa dijurnal. `void_commission` membalik KEDUA jurnal — membalik
+   pengakuan saja meninggalkan utang komisi menggantung.
+   Basis kas dipakai sebentar pada 2026-08-20 lalu diganti akrual di hari yang
+   sama, karena komisi terutang tidak muncul di neraca sama sekali. Komisi lama
+   dari era itu ditambal `python -m app.backfill_komisi_akrual` (dry run dulu,
+   baru `--terapkan`) — sengaja bukan migrasi, karena menambah beban ke periode
+   yang mungkin sudah dilaporkan harus dilihat manusia.
+
+`/reports/commission` yang lama (rate rata × margin semua SKU) **bukan** angka
+komisi sebenarnya; ia sekarang dilabeli **Simulasi Komisi** di UI. Angka nyata
+ada di `/commissions/report`, dan hanya `total_dibayar` yang bisa dicocokkan
+dengan akun 6-1100 di Laba Rugi.
+
+**Masih terbuka:** `reports_ext.commission` dan `reports_ext.gpm` menghitung modal
+dari `Product.purchase_price` (modal ACUAN dari master ÷ isi dus), sementara HPP di
+laba-rugi memakai `avg_cost` NYATA. Jadi margin di dua laporan itu bisa berbeda
+untuk penjualan yang sama — perilaku lama yang sengaja mengikuti sheet KOMISI
+client. Sekarang risikonya lebih kecil karena komisi tidak lagi diturunkan dari
+angka itu (cuma dipakai sebagai saran di form), tapi jangan "perbaiki" sepihak.
+
+### Aturan keempat: cara membayar tidak menyentuh cara mengakui
+
+Rancangan lengkapnya di `RANCANGAN-KUSTOMISASI.md`. Penjaganya
+`tests/test_receivable_terms.py`.
+
+1. **Jurnal penjualan seragam untuk SEMUA kesepakatan pembayaran** — tunai,
+   tempo, DP, atau tagih di PO berikutnya menghasilkan jurnal faktur yang persis
+   sama. Variasinya hanya menyentuh akun NERACA lewat `advance_service` dan
+   `terms_service`. Karena itu Laba Rugi tidak perlu tahu ada variasi, dan mode
+   pembayaran baru tidak akan pernah bisa merusaknya. Jangan pernah membuat
+   `invoice_service` bercabang berdasarkan cara bayar.
+2. **DP masuk lewat `advance_service`, TIDAK lewat `payment_service`.** Yang
+   terakhir selalu mengkredit Piutang Usaha; dipakai untuk uang yang masuk
+   sebelum faktur ada, piutang jadi minus dan pendapatannya tak punya lawan.
+   DP = `Dr Kas / Cr Uang Muka Pelanggan (2-1500)`, lalu dialokasikan ke faktur
+   dengan `Dr Uang Muka / Cr Piutang`. PPN tidak dipungut saat DP diterima
+   (keputusan client 2026-08-20); kalau berubah, jadikan flag, jangan hardcode.
+3. **Kelebihan DP tetap kewajiban**, bukan piutang negatif. `allocate_to_invoice`
+   menolak alokasi yang melebihi sisa piutang faktur.
+4. **Setiap faktur SELALU punya `invoice_terms`.** `create_and_post_invoice`
+   membuatnya otomatis dari `Contact.payment_term_days` bila `terms` tidak
+   dikirim, jadi `ar_aging` tidak pernah perlu menebak dari tanggal faktur.
+   Jalur cadangan untuk faktur tanpa jadwal masih ada di `ar_aging` sebagai
+   pengaman, tapi seharusnya tidak pernah terpakai pada data baru.
+5. **`invoice_terms` wajib berjumlah persis `Invoice.total`.** Ditegakkan di
+   `terms_service.set_terms`. Jadwal yang boleh berbeda dari faktur membuat AR
+   Aging melaporkan angka yang tidak pernah cocok dengan Neraca, tanpa error.
+6. **`due_date` NULL berarti belum ada tanggal**, bukan jatuh tempo hari faktur.
+   `reports.ar_aging` menaruhnya di ember `tanpa_tempo` — kalau tidak, kesepakatan
+   "tagih saat order berikutnya" terbaca menunggak 90+ hari dan orang menagih
+   customer yang tidak terlambat.
+7. **Skema komisi & termin adalah daftar TERTUTUP.** Tipe `manual` (komisi) dan
+   `custom` (termin) adalah pintu darurat yang menyimpan ANGKA, bukan aturan —
+   keduanya tidak menghitung apa pun. Jangan pernah membuatnya menerima rumus
+   yang dieksekusi sistem: begitu rumus bisa diketik user, angkanya berhenti bisa
+   dijelaskan dan tidak bisa dites. Tambah tipe baru bernama jelas saja.
+8. **Skema di-snapshot ke baris komisi** (`scheme_type`, `scheme_value`), sama
+   seperti `unit_factor`. Jangan membaca ulang tarif dari master saat melapor.
+
+Catatan UI: satu faktur kini menghasilkan BEBERAPA baris di AR Aging (satu per
+termin belum lunas), jadi kunci baris React harus menyertakan `term_sequence` —
+nomor faktur saja akan duplikat.
+
+Tes invarian yang paling menentukan: `test_saldo_piutang_cocok_dengan_neraca` —
+total outstanding AR Aging harus sama persis dengan saldo akun 1-1200 di Neraca.
+Sepadan dengan tes valuasi stok vs akun Persediaan. Kalau gagal, ada jalur uang
+yang salah akun.
 
 Penomoran dokumen memakai row-lock (`SELECT ... FOR UPDATE`) di `services/numbering.py`.
 Resolusi akun default per perusahaan lewat kode CoA di `services/accounts_map.py`.

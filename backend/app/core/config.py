@@ -36,10 +36,6 @@ class Settings(BaseSettings):
     # --- Asisten AI web ---
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
-<<<<<<< HEAD
-    # Agent OpenAI (ChatGPT). Kosong = opsi GPT nonaktif.
-    OPENAI_API_KEY: str = ""
-=======
     # Agent OpenAI (ChatGPT). Kosong = opsi GPT dan PROFILING 2.0 nonaktif.
     OPENAI_API_KEY: str = ""
 
@@ -54,7 +50,6 @@ class Settings(BaseSettings):
     PROFILING_OUTPUT_MAX_TOKENS: int = 9000
     PROFILING_BLOCKED_DOMAINS: str = "reddit.com,quora.com,wikipedia.org"
 
->>>>>>> 30a7ae8a802df3762ef70adc784e73469dfd32a8
     # Chat ID Telegram owner untuk bootstrap penautan pertama (sementara).
     TELEGRAM_OWNER_CHAT_ID: str = ""
 

@@ -7,6 +7,7 @@ import { rupiah, tanggal } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { TerminEditor, terminDefault, type Termin } from "@/components/ananta/termin-editor";
 import { Field, Select, Textarea, NumCell } from "@/components/ui/form";
 
 type Invoice = {
@@ -139,6 +140,8 @@ export default function PenjualanPage() {
     setFormError(null);
     setContactId(""); setDate(today()); setNotes(""); setLines([baris()]);
     setLastPrices([]);
+    // Jadwal kembali mengikuti total sampai user mengubahnya lagi.
+    setTerminDiubah(false); setTerminValid(true);
     setOpen(true);
     api<Contact[]>("/contacts?type=customer").then(setContacts).catch(() => {});
     api<Product[]>("/products?limit=200").then(setProducts).catch(() => {});
@@ -206,10 +209,20 @@ export default function PenjualanPage() {
 
   const total = lines.reduce((s, l) => s + lineTotal(l), 0);
 
+  // Jadwal pembayaran. Dibiarkan mengikuti total selama user belum
+  // mengutak-atiknya, supaya kasus biasa (satu termin) tidak perlu disentuh.
+  const [termin, setTermin] = useState<Termin[]>([]);
+  const [terminDiubah, setTerminDiubah] = useState(false);
+  const [terminValid, setTerminValid] = useState(true);
+  useEffect(() => {
+    if (!terminDiubah) setTermin(terminDefault(total, date));
+  }, [total, date, terminDiubah]);
+
   async function simpan(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
     if (!contactId) return setFormError("Pilih pelanggan dulu.");
+    if (!terminValid) return setFormError("Jadwal pembayaran belum pas dengan total faktur.");
     const valid = lines.filter((l) => Number(l.quantity) > 0);
     if (valid.length === 0) return setFormError("Tambahkan minimal satu baris.");
     // Harga bebas per customer, tapi jual di bawah modal harus disadari dulu.
@@ -239,6 +252,11 @@ export default function PenjualanPage() {
             note: l.note.trim() || null,
             discount: l.discount || "0",
             tax_rate: l.tax_rate || "0",
+          })),
+          terms: termin.map((t) => ({
+            kind: t.kind,
+            due_date: t.due_date || null,
+            amount: t.amount,
           })),
         }),
       });
@@ -455,6 +473,15 @@ export default function PenjualanPage() {
             </div>
           </div>
 
+          <Field label="Jadwal pembayaran"
+            hint="Kesepakatan penagihan — tidak mengubah jurnal faktur maupun harga yang dilihat customer">
+            <TerminEditor
+              total={total} tanggal={date} value={termin}
+              onChange={(t) => { setTerminDiubah(true); setTermin(t); }}
+              onValid={setTerminValid}
+            />
+          </Field>
+
           <Field label="Catatan">
             <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="opsional" />
           </Field>
@@ -463,7 +490,7 @@ export default function PenjualanPage() {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Batal</Button>
-            <Button type="submit" disabled={saving}>{saving ? "Memproses…" : "Terbitkan Faktur"}</Button>
+            <Button type="submit" disabled={saving || !terminValid}>{saving ? "Memproses…" : "Terbitkan Faktur"}</Button>
           </div>
         </form>
       </Modal>

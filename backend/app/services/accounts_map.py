@@ -39,6 +39,14 @@ AUTO_CREATE: dict[str, tuple[str, str, str, str]] = {
     # kunci: (kode, nama, tipe, saldo normal)
     "inventory_opening": ("3-4000", "Saldo Awal Persediaan", "equity", "credit"),
     "inventory_variance": ("5-2000", "Selisih Persediaan", "expense", "debit"),
+    # Uang muka pelanggan (DP): kewajiban menyerahkan barang, BUKAN pendapatan.
+    # Tanpa akun ini DP tidak punya tempat yang benar dan pasti akan
+    # diakal-akali jadi sesuatu yang merusak neraca.
+    "customer_advance": ("2-1500", "Uang Muka Pelanggan", "liability", "credit"),
+    # Komisi yang sudah disepakati tapi belum dibayar. Tanpa akun ini,
+    # kewajiban itu tidak muncul di mana pun dan laba terlihat lebih besar
+    # dari kenyataan.
+    "commission_payable": ("2-1600", "Utang Komisi", "liability", "credit"),
 }
 
 

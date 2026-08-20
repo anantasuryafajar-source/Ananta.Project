@@ -9,7 +9,7 @@ from .routers import (
     warehouses, courier, orders, reports_ext, settings as settings_router, account,
     bulk_import, journals, audit, reconcile,
     # --- modul keuangan lanjutan ---
-    investors, expenses,
+    investors, expenses, commissions, receivables,
     # --- Bot Telegram (langkah 1) ---
     telegram as telegram_router,
     ai_chat,
@@ -80,6 +80,8 @@ app.include_router(settings_router.router, prefix=API)
 app.include_router(investors.router, prefix=API)
 app.include_router(expenses.router, prefix=API)
 app.include_router(expenses.loan_router, prefix=API)
+app.include_router(commissions.router, prefix=API)
+app.include_router(receivables.router, prefix=API)
 app.include_router(account.router, prefix=API)
 app.include_router(bulk_import.router, prefix=API)
 app.include_router(journals.router, prefix=API)

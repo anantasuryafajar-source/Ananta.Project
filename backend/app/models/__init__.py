@@ -19,6 +19,8 @@ from .orders import PurchaseOrder, POLine, SalesOrder, SOLine
 # --- Modul keuangan lanjutan (step 2-3) ---
 from .investor import Investor, InvestorPayout
 from .expense import Expense, EmployeeLoan
+from .commission import SalesCommission, CommissionScheme
+from .receivable import CustomerAdvance, AdvanceAllocation, InvoiceTerm
 # --- Bot Telegram (langkah 1) ---
 from .telegram import TelegramLink, TelegramSession
 from .scheduler import SchedulerRun
@@ -35,6 +37,8 @@ __all__ = [
     "PurchaseOrder", "POLine", "SalesOrder", "SOLine",
     "Investor", "InvestorPayout",
     "Expense", "EmployeeLoan",
+    "SalesCommission", "CommissionScheme",
+    "CustomerAdvance", "AdvanceAllocation", "InvoiceTerm",
     "TelegramLink", "TelegramSession",
     "SchedulerRun",
     "AiConversation", "AiMessage",

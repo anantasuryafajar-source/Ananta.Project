@@ -23,12 +23,29 @@ class InvoiceLineIn(BaseModel):
     note: str | None = Field(default=None, max_length=255)
 
 
+class InvoiceTermIn(BaseModel):
+    """Satu baris jadwal pembayaran.
+
+    `custom` adalah pintu darurat untuk kesepakatan yang tidak terduga: ia
+    menyimpan tanggal & nominal apa adanya, tanpa aturan yang dieksekusi.
+    `po_berikutnya` sengaja tidak punya tanggal.
+    """
+    kind: str = Field(default="tempo",
+                      pattern="^(tunai|dp|tempo|po_berikutnya|custom)$")
+    due_date: date | None = None
+    amount: Decimal = Field(gt=0)
+    note: str | None = None
+
+
 class InvoiceIn(BaseModel):
     contact_id: str
     date: date
     warehouse_id: str | None = None
     notes: str | None = None
     lines: list[InvoiceLineIn] = Field(min_length=1)
+    # Kosong -> dibuatkan satu termin dari payment_term_days customer.
+    # Total termin wajib sama persis dengan total faktur.
+    terms: list[InvoiceTermIn] | None = None
 
 
 class InvoiceLineOut(ORMModel):

@@ -127,6 +127,7 @@ async def create_invoice(
             contact_id=body.contact_id, on_date=body.date,
             warehouse_id=body.warehouse_id,
             lines_in=[l.model_dump() for l in body.lines], notes=body.notes,
+            terms=[t.model_dump() for t in body.terms] if body.terms else None,
         )
         await db.commit()
     except (JournalNotBalanced, NoWarehouse) as e:

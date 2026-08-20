@@ -48,6 +48,13 @@ COA = [
     # LIABILITAS
     ("2-1000", "Utang Usaha", "liability", "credit"),
     ("2-1300", "PPN Keluaran", "liability", "credit"),
+    # Uang muka pelanggan: DP yang diterima SEBELUM barang keluar. Kewajiban
+    # menyerahkan barang, bukan pendapatan. Lihat services/advance_service.py.
+    ("2-1500", "Uang Muka Pelanggan", "liability", "credit"),
+    # Komisi yang sudah disepakati tapi belum dibayar. Tanpa akun ini,
+    # kewajiban itu tidak muncul di mana pun dan laba terlihat lebih besar
+    # dari kenyataan. Lihat services/commission_service.py.
+    ("2-1600", "Utang Komisi", "liability", "credit"),
     ("2-2000", "Utang Pajak", "liability", "credit"),
     ("2-3000", "Utang Investor", "liability", "credit"),
     # EKUITAS
