@@ -3,13 +3,22 @@ set -e
 
 PORT="${PORT:-8000}"
 
-# Seed jalan di BACKGROUND supaya TIDAK memblokir start server.
-# /health bisa langsung menjawab walau seed masih berjalan / DB lambat.
-echo "[entrypoint] Menjalankan seed di background (non-blocking)..."
+# Migrasi + seed jalan di BACKGROUND supaya TIDAK memblokir start server.
+# /health bisa langsung menjawab walau migrasi masih berjalan / DB lambat.
+#
+# Skema dikelola Alembic (bukan lagi create_all di dalam seed), jadi menambah
+# model baru cukup dengan revisi Alembic — tidak perlu SQL manual lagi.
+# Seed hanya mengisi data awal dan tetap dilewati bila company sudah ada.
+echo "[entrypoint] Menjalankan migrasi + seed di background (non-blocking)..."
 (
-  python -m app.seed_asf \
-    && echo "[entrypoint] Seed selesai." \
-    || echo "[entrypoint] Seed gagal/dilewati — server tetap jalan, cek koneksi DB."
+  if alembic upgrade head; then
+    echo "[entrypoint] Migrasi selesai."
+    python -m app.seed_asf \
+      && echo "[entrypoint] Seed selesai." \
+      || echo "[entrypoint] Seed gagal/dilewati — server tetap jalan, cek koneksi DB."
+  else
+    echo "[entrypoint] MIGRASI GAGAL — seed dilewati. Server tetap jalan; cek DATABASE_URL."
+  fi
 ) &
 
 echo "[entrypoint] Start server di port ${PORT}..."

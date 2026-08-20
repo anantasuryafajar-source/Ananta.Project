@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Sparkles, ArrowUp, Plus, Trash2, PanelLeft, ChevronDown, Paperclip, X,
+  Sparkles, ArrowUp, Plus, Trash2, PanelLeft, ChevronDown, Paperclip, X, UserRoundSearch,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -16,10 +16,19 @@ type Conv = { id: string; title: string };
 type Opt = { id: string; label: string };
 
 const CONTOH = [
+  "/profiling Dedi Prasetyo",
   "Bagaimana laba rugi bulan ini?",
   "Siapa customer dengan piutang terbesar?",
   "Berapa nilai persediaan saat ini?",
-  "Bandingkan omzet lempar vs collect.",
+];
+
+const SLASH_COMMANDS = [
+  {
+    command: "/profiling",
+    alias: "/profling",
+    label: "PROFILING 2.0",
+    description: "Cari dan susun profil publik berdasarkan nama.",
+  },
 ];
 
 export default function AsistenPage() {
@@ -176,6 +185,20 @@ export default function AsistenPage() {
   }
 
   const empty = messages.length === 0;
+  const commandToken = input.trimStart().split(/\s/, 1)[0].toLowerCase();
+  const matchingCommands = input.trimStart().startsWith("/") && !input.trimStart().includes(" ")
+    ? SLASH_COMMANDS.filter((item) =>
+        item.command.startsWith(commandToken) || item.alias.startsWith(commandToken),
+      )
+    : [];
+
+  function chooseCommand(command: string) {
+    setInput(`${command} `);
+    requestAnimationFrame(() => {
+      taRef.current?.focus();
+      grow();
+    });
+  }
 
   return (
     <div className="flex h-screen bg-[var(--canvas)]">
@@ -258,8 +281,8 @@ export default function AsistenPage() {
                   Ada yang bisa dibantu?
                 </h2>
                 <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-muted">
-                  Tanyakan apa saja tentang keuangan bisnismu. Asisten membaca data riil
-                  — laba rugi, piutang, stok — untuk menjawab.
+                  Tanyakan tentang data bisnis Ananta atau jalankan PROFILING 2.0 langsung
+                  dari chat dengan mengetik /profiling lalu nama orang.
                 </p>
                 <div className="mt-7 grid w-full gap-2.5 sm:grid-cols-2">
                   {CONTOH.map((c) => (
@@ -287,6 +310,26 @@ export default function AsistenPage() {
         {/* Composer */}
         <div className="bg-gradient-to-t from-[var(--canvas)] to-transparent px-4 pb-4 pt-2">
           <div className="mx-auto w-full max-w-3xl">
+            {matchingCommands.length > 0 && (
+              <div className="mb-2 overflow-hidden rounded-xl border border-line bg-surface shadow-[var(--shadow-pop)]">
+                {matchingCommands.map((item) => (
+                  <button
+                    key={item.command}
+                    type="button"
+                    onClick={() => chooseCommand(item.command)}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-sunken"
+                  >
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-primary">
+                      <UserRoundSearch size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-ink">{item.command} — {item.label}</span>
+                      <span className="block text-caption text-ink-subtle">{item.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             {attachments.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-2">
                 {attachments.map((a, i) => (
@@ -329,7 +372,7 @@ export default function AsistenPage() {
                 value={input}
                 onChange={(e) => { setInput(e.target.value); grow(); }}
                 onKeyDown={onKey}
-                placeholder="Tulis pertanyaan…"
+                placeholder="Tulis pertanyaan atau /profiling Nama Orang…"
                 className="max-h-[200px] flex-1 resize-none bg-transparent py-1.5 text-[15px] text-ink outline-none placeholder:text-ink-subtle"
               />
               <button
@@ -342,7 +385,7 @@ export default function AsistenPage() {
               </button>
             </div>
             <p className="mt-2 text-center text-caption text-ink-subtle">
-              Asisten bisa keliru. Verifikasi angka penting di menu Laporan.
+              Gunakan /profiling Nama Orang untuk PROFILING 2.0. Selalu review hasil penting.
             </p>
           </div>
         </div>
@@ -395,9 +438,33 @@ function Bubble({ msg }: { msg: Msg }) {
     <div className="flex gap-3">
       <Avatar />
       <div className="min-w-0 flex-1 whitespace-pre-wrap pt-0.5 text-[15px] leading-relaxed text-ink">
-        {msg.content}
+        <LinkifiedText text={msg.content} />
       </div>
     </div>
+  );
+}
+
+
+function LinkifiedText({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.startsWith("http://") || part.startsWith("https://") ? (
+          <a
+            key={`${part}-${index}`}
+            href={part}
+            target="_blank"
+            rel="noreferrer"
+            className="break-all text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </>
   );
 }
 

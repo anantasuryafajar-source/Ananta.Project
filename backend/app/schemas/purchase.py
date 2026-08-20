@@ -5,12 +5,18 @@ from .common import ORMModel
 
 
 class BillLineIn(BaseModel):
+    """Satu baris tagihan. `quantity` & `unit_cost` mengikuti `unit` yang dipilih
+    (unit="dus" -> jumlah dus & modal per dus). Supplier ASF biasanya per dus."""
     product_id: str | None = None
     description: str | None = None
     quantity: Decimal = Field(gt=0)
+    unit: str = Field(default="dus", pattern="^(dus|botol)$")
     unit_cost: Decimal = Field(ge=0)
     discount: Decimal = Decimal("0")
     tax_rate: Decimal = Decimal("0")
+    # Keterangan khusus baris ini (mis. "2 botol pecah"). Berbeda dari
+    # `notes` dokumen yang berlaku untuk seluruh nota.
+    note: str | None = Field(default=None, max_length=255)
 
 
 class BillIn(BaseModel):
@@ -24,11 +30,15 @@ class BillIn(BaseModel):
 class BillLineOut(ORMModel):
     id: str
     description: str
-    quantity: Decimal
-    unit_cost: Decimal
+    quantity: Decimal        # dalam botol (satuan dasar)
+    qty_input: Decimal       # seperti diketik user
+    unit: str                # "dus" | "botol"
+    unit_factor: int         # botol per satuan, snapshot saat transaksi
+    unit_cost: Decimal       # per `unit`
     discount: Decimal
     tax_rate: Decimal
     line_total: Decimal
+    note: str | None = None
 
 
 class BillOut(ORMModel):

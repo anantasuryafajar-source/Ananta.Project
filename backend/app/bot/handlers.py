@@ -26,6 +26,12 @@ from ..services.payment_service import pay_bill, receive_payment
 from ..services.purchase_service import create_and_post_bill
 from ..services.invoice_service import create_and_post_invoice
 from ..services.journal import JournalNotBalanced
+from ..services.units import (
+    DEFAULT_PACK_SIZE,
+    base_price_from_pack,
+    factor_for,
+    format_qty,
+)
 from .parsing import (
     CONTACT_TYPES,
     DEFAULT_EXPENSE_CODE,
@@ -35,9 +41,13 @@ from .parsing import (
     parse_amount,
     parse_contact_block,
     parse_expense_block,
+    DraftUnitMissing,
+    ItemUnitMissing,
+    draft_to_lines_in,
     parse_item_line,
     parse_loan_block,
     parse_payment_block,
+    parse_product_block,
     parse_pengadaan_block,
     parse_penjualan_block,
     resolve_contact_type,
@@ -73,18 +83,25 @@ JUAL_HINT = (
     "Format:\n/jual\n"
     "Customer: Toko Berkah\n"
     "Gudang: Gudang Utama   (opsional)\n"
-    "Item: MNS-WHK x 2 @ 300000\n"
-    "Item: CLA-AZL x 1 @ 950000\n\n"
-    "Tiap Item: SKU x jumlah @ harga_jual. Boleh banyak baris Item."
+    "Catatan: kirim sore ini   (opsional, untuk seluruh nota)\n"
+    "Item: CHIVAS-200ML x 1 dus @ 2400000\n"
+    "Item: CHIVAS-200ML x 5 botol @ 110000 # bonus\n\n"
+    "Tiap Item: SKU x jumlah SATUAN @ harga per satuan.\n"
+    "Satuan WAJIB ditulis: dus atau botol.\n"
+    "Pesanan campur (1 dus + 5 botol) = dua baris Item seperti contoh.\n"
+    "Tambahkan '# keterangan' di akhir baris bila item itu perlu catatan."
 )
 
 PENGADAAN_HINT = (
     "Format:\n/pengadaan\n"
     "Supplier: PT Sumber Minuman\n"
     "Gudang: Gudang Utama   (opsional)\n"
-    "Item: MNS-WHK x 10 @ 250000\n"
-    "Item: CLA-AZL x 5 @ 800000\n\n"
-    "Tiap Item: SKU x jumlah @ harga_beli. Boleh banyak baris Item."
+    "Catatan: kiriman susulan   (opsional, untuk seluruh nota)\n"
+    "Item: CHIVAS-200ML x 10 dus @ 1800000 # 2 botol pecah\n"
+    "Item: CHIVAS-200ML x 5 botol @ 80000\n\n"
+    "Tiap Item: SKU x jumlah SATUAN @ modal per satuan.\n"
+    "Satuan WAJIB ditulis: dus atau botol.\n"
+    "Tambahkan '# keterangan' di akhir baris bila item itu perlu catatan."
 )
 
 PAY_SUPPLIER_HINT = (
@@ -136,14 +153,26 @@ def _pick_index(text: str, n: int):
     return i - 1 if 1 <= i <= n else None
 
 # Contoh format sekali-kirim untuk /tambah_produk.
+# Harga yang diminta adalah MODAL PER DUS (bukan harga jual): harga jual berbeda
+# tiap customer dan ditentukan saat pembuatan faktur, bukan di master produk.
 PRODUCT_FORMAT_HINT = (
     "Format cepat (kirim sekaligus):\n"
     "/tambah_produk\n"
-    "SKU: EBN\n"
-    "Nama: MINUMAN EBEN\n"
-    "Satuan: botol\n"
-    "Harga: 0"
+    "Nama: Chivas 200ml\n"
+    "Isi per dus: 24\n"
+    "Modal per dus: 1800000"
 )
+
+
+def _parse_pack(text: str | None):
+    """Isi per dus dari teks. None bila tidak valid, default bila kosong/'-'."""
+    raw = (text or "").strip()
+    if raw in ("", "-"):
+        return DEFAULT_PACK_SIZE
+    cleaned = raw.replace(".", "").replace(",", "").replace(" ", "")
+    if not cleaned.isdigit() or int(cleaned) < 1:
+        return None
+    return int(cleaned)
 
 
 def _parse_price(text: str):
@@ -158,30 +187,6 @@ def _parse_price(text: str):
     if price < 0:
         return None
     return price
-
-
-def parse_product_block(block: str) -> dict:
-    """Parse blok multi-baris 'Kunci: Nilai' jadi dict field produk.
-
-    Toleran: tanda '-' di depan, spasi bebas, kunci Indonesia/Inggris.
-    """
-    out: dict = {}
-    for raw in block.splitlines():
-        line = raw.strip().lstrip("-").strip()
-        if not line or ":" not in line:
-            continue
-        key, _, val = line.partition(":")
-        key = key.strip().lower()
-        val = val.strip()
-        if key == "sku":
-            out["sku"] = val[:40]
-        elif key in ("nama", "name"):
-            out["name"] = val[:200]
-        elif key in ("satuan", "unit"):
-            out["unit"] = val[:20]
-        elif key in ("harga", "harga jual", "price"):
-            out["price_raw"] = val
-    return out
 
 
 def _code_valid(target) -> bool:
@@ -403,41 +408,47 @@ async def cmd_tambah_produk(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # --- Mode sekali-kirim: ada blok format di bawah perintah ---
         if body:
             fields = parse_product_block(body)
-            missing = [k for k in ("sku", "name") if not fields.get(k)]
-            if missing:
-                label = {"sku": "SKU", "name": "Nama"}
+            if not fields.get("name"):
                 await update.message.reply_text(
-                    "Format kurang lengkap. Wajib ada "
-                    + " dan ".join(label[m] for m in missing)
-                    + ".\n\n"
-                    + PRODUCT_FORMAT_HINT
+                    "Format kurang lengkap. Wajib ada Nama.\n\n" + PRODUCT_FORMAT_HINT
                 )
                 return
-            price = _parse_price(fields.get("price_raw", "0"))
-            if price is None:
+            modal_dus = _parse_price(fields.get("price_raw", "0"))
+            if modal_dus is None:
                 await update.message.reply_text(
-                    "Harga tidak valid. Masukkan angka saja, mis. 250000 atau 0."
+                    "Modal tidak valid. Masukkan angka saja, mis. 1800000 atau 0."
+                )
+                return
+            pack_size = _parse_pack(fields.get("pack_raw"))
+            if pack_size is None:
+                await update.message.reply_text(
+                    "Isi per dus tidak valid. Masukkan bilangan bulat, mis. 12, 24, atau 48."
                 )
                 return
             prod = await create_product(
                 db,
                 company_id=u.company_id,
-                sku=fields["sku"],
                 name=fields["name"],
-                unit=fields.get("unit", "pcs"),
-                sale_price=price,
+                sku=fields.get("sku") or None,   # kosong -> dibuat otomatis
+                pack_size=pack_size,
+                pack_purchase_price=modal_dus,   # MODAL per dus, bukan harga jual
             )
             await clear_state(db, chat_id)  # jaga-jaga bila ada alur menggantung
             await update.message.reply_text(
-                f"Tersimpan: {prod.name} ({prod.sku}), satuan {prod.unit}, harga {price}.\n"
+                f"Tersimpan: {prod.name}\n"
+                f"- Isi per dus : {prod.pack_size} botol\n"
+                f"- Modal/dus   : {_rp(prod.pack_purchase_price)}\n"
+                f"- Modal/botol : {_rp(prod.purchase_price)}\n\n"
+                "Harga jual tidak disetel di sini — diisi saat membuat faktur.\n"
                 "Cek di web Ananta -> menu Produk."
             )
             return
 
         # --- Mode terpandu: perintah dikirim polos ---
-        await set_state(db, chat_id, "add_product", "sku", {})
+        # Mulai dari nama; SKU tidak lagi ditanyakan (dibuat otomatis).
+        await set_state(db, chat_id, "add_product", "name", {})
     await update.message.reply_text(
-        "Tambah produk baru.\nMasukkan SKU (mis. MNS-WHK):\n\n"
+        "Tambah produk baru.\nNama produk (mis. Chivas 200ml):\n\n"
         "(ketik /batal kapan saja untuk membatalkan)\n\n"
         "Atau lain kali kirim sekaligus:\n" + PRODUCT_FORMAT_HINT
     )
@@ -457,64 +468,77 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # alur terpandu, kenali dan proses sekaligus -- jangan diperlakukan
             # sebagai satu jawaban langkah.
             blok = parse_product_block(text)
-            if blok.get("sku") and blok.get("name"):
+            if blok.get("name"):
                 u = await _linked_user(db, chat_id)
                 if u is None:
                     await clear_state(db, chat_id)
                     await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
                     return
-                price = _parse_price(blok.get("price_raw", "0"))
-                if price is None:
+                modal_dus = _parse_price(blok.get("price_raw", "0"))
+                if modal_dus is None:
                     await update.message.reply_text(
-                        "Harga tidak valid. Masukkan angka saja, mis. 250000 atau 0."
+                        "Modal tidak valid. Masukkan angka saja, mis. 1800000 atau 0."
+                    )
+                    return
+                pack_size = _parse_pack(blok.get("pack_raw"))
+                if pack_size is None:
+                    await update.message.reply_text(
+                        "Isi per dus tidak valid. Masukkan bilangan bulat, mis. 12, 24, 48."
                     )
                     return
                 prod = await create_product(
                     db,
                     company_id=u.company_id,
-                    sku=blok["sku"],
                     name=blok["name"],
-                    unit=blok.get("unit", "pcs"),
-                    sale_price=price,
+                    sku=blok.get("sku") or None,
+                    pack_size=pack_size,
+                    pack_purchase_price=modal_dus,
                 )
                 await clear_state(db, chat_id)
                 await update.message.reply_text(
-                    f"Tersimpan: {prod.name} ({prod.sku}), satuan {prod.unit}, harga {price}.\n"
+                    f"Tersimpan: {prod.name}\n"
+                    f"- Isi per dus : {prod.pack_size} botol\n"
+                    f"- Modal/dus   : {_rp(prod.pack_purchase_price)}\n"
+                    f"- Modal/botol : {_rp(prod.purchase_price)}\n\n"
                     "Cek di web Ananta -> menu Produk."
                 )
                 return
 
-            if st.step == "sku":
-                draft["sku"] = text[:40]
-                await set_state(db, chat_id, "add_product", "name", draft)
-                await update.message.reply_text("Nama produk:")
-            elif st.step == "name":
+            if st.step == "name":
                 draft["name"] = text[:200]
-                await set_state(db, chat_id, "add_product", "unit", draft)
+                await set_state(db, chat_id, "add_product", "pack_size", draft)
                 await update.message.reply_text(
-                    "Satuan (mis. botol). Ketik tanda - untuk memakai 'pcs':"
+                    f"Isi per dus (jumlah botol). Ketik - untuk {DEFAULT_PACK_SIZE}:"
                 )
-            elif st.step == "unit":
-                draft["unit"] = "pcs" if text == "-" else text[:20]
-                await set_state(db, chat_id, "add_product", "sale_price", draft)
-                await update.message.reply_text(
-                    "Harga jual (angka saja, mis. 250000). Ketik 0 bila belum ada:"
-                )
-            elif st.step == "sale_price":
-                price = _parse_price(text)
-                if price is None:
+            elif st.step == "pack_size":
+                pack_size = _parse_pack(text)
+                if pack_size is None:
                     await update.message.reply_text(
-                        "Harga tidak valid. Masukkan angka saja, mis. 250000:"
+                        "Isi per dus tidak valid. Bilangan bulat, mis. 12, 24, 48:"
                     )
                     return
-                draft["sale_price"] = str(price)
+                draft["pack_size"] = str(pack_size)
+                await set_state(db, chat_id, "add_product", "pack_price", draft)
+                await update.message.reply_text(
+                    "Harga MODAL per dus (angka saja, mis. 1800000). Ketik 0 bila belum ada:"
+                )
+            elif st.step == "pack_price":
+                modal_dus = _parse_price(text)
+                if modal_dus is None:
+                    await update.message.reply_text(
+                        "Modal tidak valid. Masukkan angka saja, mis. 1800000:"
+                    )
+                    return
+                draft["pack_price"] = str(modal_dus)
+                pack_size = int(draft["pack_size"])
                 await set_state(db, chat_id, "add_product", "confirm", draft)
                 await update.message.reply_text(
                     "Konfirmasi produk baru:\n"
-                    f"- SKU    : {draft['sku']}\n"
-                    f"- Nama   : {draft['name']}\n"
-                    f"- Satuan : {draft['unit']}\n"
-                    f"- Harga  : {price}\n\n"
+                    f"- Nama        : {draft['name']}\n"
+                    f"- Isi per dus : {pack_size} botol\n"
+                    f"- Modal/dus   : {_rp(modal_dus)}\n"
+                    f"- Modal/botol : {_rp(base_price_from_pack(modal_dus, pack_size))}\n\n"
+                    "Harga jual tidak disetel di sini — diisi saat membuat faktur.\n"
                     "Ketik YA untuk simpan, atau /batal."
                 )
             elif st.step == "confirm":
@@ -529,14 +553,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     prod = await create_product(
                         db,
                         company_id=u.company_id,
-                        sku=draft["sku"],
                         name=draft["name"],
-                        unit=draft.get("unit", "pcs"),
-                        sale_price=Decimal(draft.get("sale_price", "0")),
+                        pack_size=int(draft.get("pack_size", DEFAULT_PACK_SIZE)),
+                        pack_purchase_price=Decimal(draft.get("pack_price", "0")),
                     )
                     await clear_state(db, chat_id)
                     await update.message.reply_text(
-                        f"Tersimpan: {prod.name} ({prod.sku}).\n"
+                        f"Tersimpan: {prod.name} — modal {_rp(prod.pack_purchase_price)}/dus "
+                        f"({_rp(prod.purchase_price)}/botol).\n"
                         "Cek di web Ananta -> menu Produk."
                     )
                 else:
@@ -794,14 +818,16 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
                         return
                     on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()
-                    lines_in = [
-                        {
-                            "product_id": ln["product_id"],
-                            "quantity": Decimal(ln["quantity"]),
-                            "unit_cost": Decimal(ln["unit_cost"]),
-                        }
-                        for ln in draft["lines"]
-                    ]
+                    try:
+                        lines_in = draft_to_lines_in(draft["lines"],
+                                                     price_field="unit_cost")
+                    except DraftUnitMissing:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text(
+                            "Format perintah sudah diperbarui (satuan kini wajib). "
+                            "Ketik ulang /pengadaan ya."
+                        )
+                        return
                     try:
                         bill = await create_and_post_bill(
                             db,
@@ -811,7 +837,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             on_date=on_date,
                             warehouse_id=draft.get("warehouse_id"),
                             lines_in=lines_in,
-                            notes=None,
+                            notes=draft.get("notes"),
                         )
                         await db.commit()
                     except (JournalNotBalanced, ValueError) as e:
@@ -845,14 +871,16 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         await update.message.reply_text("Sesi tidak tertaut lagi. Ketik /link.")
                         return
                     on_date = (datetime.now(timezone.utc) + timedelta(hours=7)).date()
-                    lines_in = [
-                        {
-                            "product_id": ln["product_id"],
-                            "quantity": Decimal(ln["quantity"]),
-                            "unit_price": Decimal(ln["unit_price"]),
-                        }
-                        for ln in draft["lines"]
-                    ]
+                    try:
+                        lines_in = draft_to_lines_in(draft["lines"],
+                                                     price_field="unit_price")
+                    except DraftUnitMissing:
+                        await clear_state(db, chat_id)
+                        await update.message.reply_text(
+                            "Format perintah sudah diperbarui (satuan kini wajib). "
+                            "Ketik ulang /jual ya."
+                        )
+                        return
                     try:
                         inv = await create_and_post_invoice(
                             db,
@@ -862,7 +890,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             on_date=on_date,
                             warehouse_id=draft.get("warehouse_id"),
                             lines_in=lines_in,
-                            notes=None,
+                            notes=draft.get("notes"),
                         )
                         await db.commit()
                     except (JournalNotBalanced, ValueError) as e:
@@ -1330,21 +1358,36 @@ async def cmd_pengadaan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         total = Decimal("0")
         summary_lines = []
         for i, raw in enumerate(parsed["items"], 1):
-            item = parse_item_line(raw)
+            try:
+                item = parse_item_line(raw)
+            except ItemUnitMissing:
+                errors.append(
+                    f"Baris {i} tidak menyebut satuan: '{raw}'. "
+                    f"Tulis 'SKU x jumlah dus @ harga' atau '... botol @ harga'."
+                )
+                continue
             if item is None:
                 errors.append(f"Baris {i} salah format: '{raw}'")
                 continue
-            sku, qty, price = item
+            sku, qty, unit, price, note = item
             prod = await _find_product_by_sku(db, u.company_id, sku)
             if prod is None:
                 errors.append(f"SKU '{sku}' tidak ditemukan (baris {i})")
                 continue
             subtotal = qty * price
             total += subtotal
-            lines.append(
-                {"product_id": prod.id, "quantity": str(qty), "unit_cost": str(price)}
+            # quantity & harga mengikuti satuan yang ditulis; service yang
+            # mengonversi ke botol untuk stok & avg_cost.
+            lines.append({
+                "product_id": prod.id, "quantity": str(qty), "unit": unit,
+                "unit_cost": str(price), "note": note,
+            })
+            botol = format_qty(qty * factor_for(unit, prod.pack_size), prod.pack_size)
+            summary_lines.append(
+                f"- {prod.name} x {qty} {unit} ({botol}) @ {_rp(price)}/{unit}"
+                f" = {_rp(subtotal)}"
+                + (f"\n    ket: {note}" if note else "")
             )
-            summary_lines.append(f"- {prod.name} ({sku}) x {qty} @ {price} = {subtotal}")
 
         if errors:
             await update.message.reply_text(
@@ -1357,6 +1400,7 @@ async def cmd_pengadaan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "supplier_name": supplier.name,
             "warehouse_id": wh_id,
             "lines": lines,
+            "notes": parsed.get("notes"),
         }
         await set_state(db, chat_id, "pengadaan", "confirm", draft)
     await update.message.reply_text(
@@ -1430,21 +1474,36 @@ async def cmd_jual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         total = Decimal("0")
         summary_lines = []
         for i, raw in enumerate(parsed["items"], 1):
-            item = parse_item_line(raw)
+            try:
+                item = parse_item_line(raw)
+            except ItemUnitMissing:
+                errors.append(
+                    f"Baris {i} tidak menyebut satuan: '{raw}'. "
+                    f"Tulis 'SKU x jumlah dus @ harga' atau '... botol @ harga'."
+                )
+                continue
             if item is None:
                 errors.append(f"Baris {i} salah format: '{raw}'")
                 continue
-            sku, qty, price = item
+            sku, qty, unit, price, note = item
             prod = await _find_product_by_sku(db, u.company_id, sku)
             if prod is None:
                 errors.append(f"SKU '{sku}' tidak ditemukan (baris {i})")
                 continue
             subtotal = qty * price
             total += subtotal
-            lines.append(
-                {"product_id": prod.id, "quantity": str(qty), "unit_price": str(price)}
+            # quantity & harga mengikuti satuan yang ditulis; service yang
+            # mengonversi ke botol untuk stok & avg_cost.
+            lines.append({
+                "product_id": prod.id, "quantity": str(qty), "unit": unit,
+                "unit_price": str(price), "note": note,
+            })
+            botol = format_qty(qty * factor_for(unit, prod.pack_size), prod.pack_size)
+            summary_lines.append(
+                f"- {prod.name} x {qty} {unit} ({botol}) @ {_rp(price)}/{unit}"
+                f" = {_rp(subtotal)}"
+                + (f"\n    ket: {note}" if note else "")
             )
-            summary_lines.append(f"- {prod.name} ({sku}) x {qty} @ {price} = {subtotal}")
 
         if errors:
             await update.message.reply_text(
@@ -1457,6 +1516,7 @@ async def cmd_jual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "customer_name": customer.name,
             "warehouse_id": wh_id,
             "lines": lines,
+            "notes": parsed.get("notes"),
         }
         await set_state(db, chat_id, "penjualan", "confirm", draft)
     await update.message.reply_text(

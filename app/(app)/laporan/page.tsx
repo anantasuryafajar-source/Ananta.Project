@@ -12,7 +12,7 @@ import { rupiah } from "@/lib/format";
 type Row = { code?: string; name: string; amount: string };
 type PL = { income: Row[]; expense: Row[]; total_income: string; total_expense: string; net_profit: string };
 type Aging = { buckets: Record<string, string>; total: string; items: { number: string; contact: string; age_days: number; outstanding: string }[] };
-type Stock = { items: { sku: string; name: string; quantity: string; avg_cost: string; value: string }[]; total_value: string };
+type Stock = { items: { sku: string; name: string; quantity: string; qty_display: string; avg_cost: string; value: string }[]; total_value: string };
 type Cashflow = { months: { month: string; in: string; out: string; net: string }[]; total_in: string; total_out: string; net: string };
 type Quarterly = { items: { quarter: string; omzet: string; hpp: string; gross_profit: string }[] };
 type ArLimit = { items: { customer: string; outstanding: string; credit_limit: string; ratio: number | null; status: string }[]; total_outstanding: string };
@@ -374,7 +374,7 @@ function StockVal({ stock }: { stock: Stock }) {
           {stock.items.map((it) => (
             <tr key={it.sku} className="border-t border-line">
               <td className="py-1 text-ink-muted">{it.sku}</td><td className="text-ink">{it.name}</td>
-              <td className="text-right tabular-nums text-ink-muted">{Number(it.quantity)}</td>
+              <td className="text-right tabular-nums text-ink-muted">{it.qty_display}</td>
               <td className="text-right tabular-nums text-ink-muted">{rupiah(it.avg_cost)}</td>
               <td className="text-right tabular-nums text-ink">{rupiah(it.value)}</td>
             </tr>
@@ -472,7 +472,7 @@ function tableFor(tab: string, data: any): Tabular {
         rows: (data.by_sku ?? []).map((i: any) => [i.sku, i.name, i.revenue, i.margin, i.gpm ?? ""]) };
     case "Valuasi Stok":
       return { title: "Valuasi Stok", headers: ["SKU", "Nama", "Qty", "Avg Cost", "Nilai"],
-        rows: (data.items ?? []).map((i: any) => [i.sku, i.name, i.quantity, i.avg_cost, i.value]) };
+        rows: (data.items ?? []).map((i: any) => [i.sku, i.name, i.qty_display ?? i.quantity, i.avg_cost, i.value]) };
     case "Kartu Piutang":
       return { title: `Kartu Piutang ${data.customer ?? ""}`.trim(), headers: ["Tanggal", "Ref", "Jenis", "Debit", "Kredit", "Saldo"],
         rows: (data.entries ?? []).map((e: any) => [e.date, e.ref, e.type, e.debit, e.credit, e.balance]) };

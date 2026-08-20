@@ -9,6 +9,10 @@ Jurnal penjualan (barang):
         Cr  PPN Keluaran                tax_total
     Dr  HPP                      cost
         Cr  Persediaan                  cost
+
+SATUAN: setiap baris boleh "dus" atau "botol" (pesanan campur = dua baris).
+Uang dihitung dari jumlah & harga SATUAN YANG DIPILIH; stok dan HPP memakai
+jumlah hasil konversi ke BOTOL. Lihat services/units.py.
 """
 from __future__ import annotations
 from datetime import date, timedelta
@@ -21,6 +25,10 @@ from ..models import (
 from .journal import Line, post_journal
 from .numbering import next_number
 from .accounts_map import code_to_id
+from .units import (
+    BASE_UNIT, factor_for, format_qty, resolve_warehouse, to_base,
+    try_normalize_unit,
+)
 
 CENT = Decimal("0.01")
 
@@ -45,6 +53,11 @@ async def create_and_post_invoice(
                               Contact.company_id == company_id)
     )).scalar_one()
 
+    # Tanpa gudang, stok dulu tidak dipotong DAN HPP tidak diposting sama sekali —
+    # omzet tercatat tanpa modal sehingga laba terlihat jauh lebih besar dari
+    # kenyataan. Gudang kini wajib: kosong -> pakai gudang default perusahaan.
+    warehouse_id = await resolve_warehouse(db, company_id, warehouse_id)
+
     acc = await code_to_id(db, company_id)
     number = await next_number(
         db, company_id=company_id, doc_type="invoice", on_date=on_date,
@@ -58,11 +71,12 @@ async def create_and_post_invoice(
     stock_ops: list[tuple[Product, Decimal, Decimal]] = []  # (product, qty, unit_cost)
 
     for raw in lines_in:
-        qty = Decimal(str(raw["quantity"]))
+        # qty_input & price mengikuti satuan yang dipilih user (dus atau botol).
+        qty_input = Decimal(str(raw["quantity"]))
         price = Decimal(str(raw["unit_price"]))
         discount = Decimal(str(raw.get("discount", 0)))
         tax_rate = Decimal(str(raw.get("tax_rate", 0)))
-        base, tax = compute_line(qty, price, discount, tax_rate)
+        base, tax = compute_line(qty_input, price, discount, tax_rate)
         subtotal += base
         tax_total += tax
 
@@ -72,14 +86,23 @@ async def create_and_post_invoice(
                 select(Product).where(Product.id == raw["product_id"])
             )).scalar_one()
 
+        # Satuan + faktor konversi. Faktor DI-SNAPSHOT ke baris supaya riwayat
+        # tetap berarti sama walau isi/dus produk diubah nanti.
+        unit = try_normalize_unit(raw.get("unit")) or BASE_UNIT
+        factor = factor_for(unit, product.pack_size if product else 1)
+        qty_base = to_base(qty_input, factor)
+
         inv_lines.append(InvoiceLine(
             product_id=raw.get("product_id"),
             description=raw.get("description") or (product.name if product else ""),
-            quantity=qty, unit_price=price, discount=discount,
+            quantity=qty_base, qty_input=qty_input, unit=unit, unit_factor=factor,
+            unit_price=price, discount=discount,
             tax_rate=tax_rate, line_total=_q(base + tax),
+            note=(raw.get("note") or None),
         ))
 
-        # Potong stok hanya untuk barang (good), bukan jasa
+        # Potong stok hanya untuk barang (good), bukan jasa.
+        # avg_cost & stok dalam BOTOL, jadi pakai qty_base.
         if product and product.kind == "good" and warehouse_id:
             level = (await db.execute(
                 select(StockLevel).where(
@@ -88,8 +111,8 @@ async def create_and_post_invoice(
                 )
             )).scalar_one_or_none()
             unit_cost = Decimal(str(level.avg_cost)) if level else Decimal("0")
-            cogs_total += _q(unit_cost * qty)
-            stock_ops.append((product, qty, unit_cost))
+            cogs_total += _q(unit_cost * qty_base)
+            stock_ops.append((product, qty_base, unit_cost))
 
     subtotal, tax_total = _q(subtotal), _q(tax_total)
     total = _q(subtotal + tax_total)
@@ -125,7 +148,7 @@ async def create_and_post_invoice(
     )
     invoice.journal_id = journal.id
 
-    # --- Mutasi & saldo stok ---
+    # --- Mutasi & saldo stok (semua dalam BOTOL) ---
     stock_warnings = []
     for product, qty, unit_cost in stock_ops:
         level = (await db.execute(
@@ -136,11 +159,12 @@ async def create_and_post_invoice(
         )).scalar_one_or_none()
         avail = Decimal(str(level.quantity)) if level else Decimal("0")
         if qty > avail:
+            # Ditampilkan sebagai "dus + botol" supaya gudang langsung paham.
             stock_warnings.append({
                 "product": product.name,
-                "diminta": str(qty),
-                "tersedia": str(avail),
-                "kurang": str(qty - avail),
+                "diminta": format_qty(qty, product.pack_size),
+                "tersedia": format_qty(avail, product.pack_size),
+                "kurang": format_qty(qty - avail, product.pack_size),
             })
         if level:
             level.quantity = Decimal(str(level.quantity)) - qty

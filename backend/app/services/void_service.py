@@ -31,6 +31,11 @@ def _q(v) -> Decimal:
     return Decimal(str(v)).quantize(CENT)
 
 
+def _qc(v) -> Decimal:
+    """Biaya per satuan (avg_cost) — 4 desimal, lihat UnitCost di models/base.py."""
+    return Decimal(str(v)).quantize(Decimal("0.0001"))
+
+
 class VoidError(ValueError):
     pass
 
@@ -73,6 +78,69 @@ async def _level(db, product_id, warehouse_id) -> StockLevel | None:
         select(StockLevel).where(StockLevel.product_id == product_id,
                                  StockLevel.warehouse_id == warehouse_id)
     )).scalar_one_or_none()
+
+
+async def _movements_of(db, ref_id: str) -> list[StockMovement]:
+    """SEMUA mutasi stok milik dokumen ini — termasuk mutasi balik dari void.
+
+    Hapus permanen dulu hanya membaca mutasi ASLI (`ref_type="invoice"`),
+    sehingga dokumen yang sudah di-void mengembalikan stok DUA KALI: sekali
+    oleh void, sekali lagi oleh hapus permanen.
+    """
+    return (await db.execute(
+        select(StockMovement).where(StockMovement.ref_id == ref_id)
+    )).scalars().all()
+
+
+def _efek_stok(m: StockMovement) -> Decimal:
+    """Perubahan saldo stok yang DULU disebabkan mutasi ini."""
+    qty = Decimal(str(m.quantity))
+    return -qty if m.direction == "out" else qty
+
+
+async def _batalkan_mutasi(db, m: StockMovement) -> None:
+    """Kembalikan saldo ke keadaan sebelum mutasi ini, lalu hapus mutasinya.
+
+    Saat stok bertambah dipakai rata-rata tertimbang; saat berkurang, avg_cost
+    tidak berubah — sesuai metode average.
+    """
+    efek = _efek_stok(m)
+    unit_cost = Decimal(str(m.unit_cost or 0))
+    level = await _level(db, m.product_id, m.warehouse_id)
+    if level is None:
+        level = StockLevel(product_id=m.product_id, warehouse_id=m.warehouse_id,
+                           quantity=Decimal("0"), avg_cost=unit_cost)
+        db.add(level)
+        await db.flush()
+
+    old_q = Decimal(str(level.quantity))
+    old_avg = Decimal(str(level.avg_cost))
+    balik = -efek                      # kebalikan dari dampak mutasi
+    new_q = old_q + balik
+    if balik > 0:
+        level.avg_cost = _qc(
+            ((old_q * old_avg + balik * unit_cost) / new_q) if new_q > 0
+            else unit_cost
+        )
+    level.quantity = new_q.quantize(QTYQ)
+    await db.delete(m)
+
+
+async def _delete_journals_of(db, source_id: str) -> None:
+    """Hapus SEMUA jurnal yang menunjuk dokumen ini.
+
+    Termasuk jurnal balik dari pembatalan (`source_type="void_invoice"` /
+    `"void_bill"`). Dulu hanya `doc.journal_id` yang dihapus, sehingga faktur
+    yang di-void lalu dihapus permanen meninggalkan jurnal balik yatim: buku
+    besar hanya berisi sisi baliknya, dan laba-rugi menampilkan pendapatan
+    NEGATIF.
+    """
+    ids = (await db.execute(
+        select(Journal.id).where(Journal.source_id == source_id)
+    )).scalars().all()
+    for jid in ids:
+        await _delete_journal(db, jid)
+
 
 
 # ============================================================ VOID INVOICE
@@ -256,29 +324,16 @@ async def hard_delete_invoice(db: AsyncSession, *, company_id: str,
     )).scalars().all():
         ce.invoice_id = None
 
-    # 3) kembalikan stok dari movement asli, lalu hapus movement-nya
-    for m in await _movements(db, "invoice", inv.id):
-        qty = Decimal(str(m.quantity))
-        unit_cost = Decimal(str(m.unit_cost or 0))
-        level = await _level(db, m.product_id, m.warehouse_id)
-        if level is None:
-            level = StockLevel(product_id=m.product_id, warehouse_id=m.warehouse_id,
-                               quantity=Decimal("0"), avg_cost=unit_cost)
-            db.add(level)
-            await db.flush()
-        old_q = Decimal(str(level.quantity))
-        old_avg = Decimal(str(level.avg_cost))
-        new_q = old_q + qty
-        new_avg = ((old_q * old_avg + qty * unit_cost) / new_q) if new_q > 0 else unit_cost
-        level.quantity = new_q.quantize(QTYQ)
-        level.avg_cost = _q(new_avg)
-        await db.delete(m)
+    # 3) batalkan SELURUH mutasi stok dokumen ini (asli maupun hasil void),
+    #    lalu hapus mutasinya. Faktur yang sudah di-void bernilai bersih nol,
+    #    jadi stok tidak dikembalikan dua kali.
+    for m in await _movements_of(db, inv.id):
+        await _batalkan_mutasi(db, m)
 
-    # 4) hapus dokumen + jurnalnya
-    jid = inv.journal_id
+    # 4) hapus dokumen + SEMUA jurnalnya (termasuk jurnal balik pembatalan)
     await db.delete(inv)  # lines ikut (cascade)
     await db.flush()
-    await _delete_journal(db, jid)
+    await _delete_journals_of(db, inv.id)
     return number
 
 
@@ -291,11 +346,18 @@ async def hard_delete_bill(db: AsyncSession, *, company_id: str,
         raise VoidError("Tagihan tidak ditemukan.")
     number = bill.number
 
-    moves = await _movements(db, "bill", bill.id)
-    # pra-cek stok cukup untuk ditarik
+    moves = await _movements_of(db, bill.id)
+    # Pra-cek memakai dampak BERSIH: tagihan yang sudah di-void stoknya sudah
+    # ditarik, jadi tidak ada lagi yang perlu ditarik dan tidak perlu dicek.
+    bersih: dict[tuple[str, str], Decimal] = {}
     for m in moves:
-        level = await _level(db, m.product_id, m.warehouse_id)
-        if level is None or Decimal(str(level.quantity)) < Decimal(str(m.quantity)):
+        kunci = (m.product_id, m.warehouse_id)
+        bersih[kunci] = bersih.get(kunci, Decimal("0")) + _efek_stok(m)
+    for (pid, wid), efek in bersih.items():
+        if efek <= 0:
+            continue
+        level = await _level(db, pid, wid)
+        if level is None or Decimal(str(level.quantity)) < efek:
             raise VoidError("Stok dari tagihan ini sudah terpakai — hapus/void dulu "
                             "transaksi penjualannya, atau gunakan reset massal.")
 
@@ -316,17 +378,14 @@ async def hard_delete_bill(db: AsyncSession, *, company_id: str,
         po.bill_id = None
         po.status = "confirmed"
 
-    # 3) tarik stok & hapus movement
+    # 3) batalkan seluruh mutasi stok dokumen ini, lalu hapus mutasinya
     for m in moves:
-        level = await _level(db, m.product_id, m.warehouse_id)
-        level.quantity = (Decimal(str(level.quantity)) - Decimal(str(m.quantity))).quantize(QTYQ)
-        await db.delete(m)
+        await _batalkan_mutasi(db, m)
 
-    # 4) dokumen + jurnal
-    jid = bill.journal_id
+    # 4) dokumen + SEMUA jurnalnya (termasuk jurnal balik pembatalan)
     await db.delete(bill)
     await db.flush()
-    await _delete_journal(db, jid)
+    await _delete_journals_of(db, bill.id)
     return number
 
 

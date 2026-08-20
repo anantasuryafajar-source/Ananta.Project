@@ -7,7 +7,7 @@
  *
  * Naikkan versi CACHE saat ada perubahan agar cache lama dibuang.
  */
-const CACHE = "ananta-v1";
+const CACHE = "ananta-v2";
 const OFFLINE_URL = "/offline";
 const PRECACHE = [OFFLINE_URL, "/icon-192.png"];
 
@@ -38,6 +38,12 @@ self.addEventListener("fetch", (event) => {
   // Lewati lintas-origin & SEMUA panggilan API — selalu jaringan, tanpa cache.
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
+
+  // JANGAN cache apa pun saat pengembangan lokal. Di produksi nama file
+  // _next/static ber-hash sehingga versi baru = URL baru; saat `next dev`
+  // namanya TETAP, jadi cache-first akan menyajikan kode lama selamanya dan
+  // perubahan tidak pernah terlihat walau halaman di-reload.
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return;
 
   // Navigasi halaman: network-first, fallback ke halaman offline.
   if (req.mode === "navigate") {

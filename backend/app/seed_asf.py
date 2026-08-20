@@ -7,19 +7,28 @@ Menggantikan seed generic dengan:
 - Supplier contoh, gudang, peran, dan user admin.
 - Saldo stok awal (opsional) supaya HPP langsung jalan.
 
-Jalankan:  python -m app.seed_asf
+Skema TIDAK lagi dibuat di sini — itu tugas Alembic. Jalankan berurutan:
+
+    alembic upgrade head          # buat/ubah tabel
+    python -m app.seed_asf        # isi data awal
+
 Aman dijalankan ulang: kalau company sudah ada, proses dilewati.
+
+Reset TOTAL (buang semua data, termasuk master — dulu dipakai saat data masih
+dummy):  alembic downgrade base && alembic upgrade head && python -m app.seed_asf
 """
 import asyncio
 from decimal import Decimal
 from sqlalchemy import select
 from .core.config import settings
-from .core.database import engine, SessionLocal
+from .core.database import SessionLocal
 from .core.security import hash_password
 from .models import (
-    Base, Company, Warehouse, User, Role, UserRole, Account,
+    Company, Warehouse, User, Role, UserRole, Account,
     Contact, Product, StockLevel,
 )
+from .services.product_service import slug_sku
+from .services.units import base_price_from_pack
 
 COMPANY_NAME = "PT ASF"
 
@@ -48,6 +57,10 @@ COA = [
     ("3-1300", "Modal - Ido", "equity", "credit"),
     ("3-2000", "Laba Ditahan", "equity", "credit"),
     ("3-3000", "Prive / Dividen", "equity", "debit"),
+    # Lawan jurnal STOK AWAL. Sengaja bukan Laba Ditahan: nilai persediaan
+    # pembuka bukan laba yang pernah dihasilkan, dan memisahkannya membuat
+    # entri pembukaan bisa ditelusuri sendiri di neraca.
+    ("3-4000", "Saldo Awal Persediaan", "equity", "credit"),
     # PENDAPATAN
     ("4-1000", "Pendapatan Penjualan", "income", "credit"),
     ("4-1100", "Retur Penjualan", "income", "debit"),
@@ -55,6 +68,9 @@ COA = [
     ("4-2000", "Pendapatan Lain", "income", "credit"),
     # HPP
     ("5-1000", "Harga Pokok Penjualan", "expense", "debit"),
+    # Lawan jurnal SELISIH OPNAME rutin. Satu akun untuk kurang maupun
+    # lebih, supaya client bisa melihat kebocoran stok bersih per periode.
+    ("5-2000", "Selisih Persediaan", "expense", "debit"),
     # BEBAN OPERASIONAL (akun riil ASF)
     ("6-1000", "Beban Gaji & Bonus", "expense", "debit"),
     ("6-1100", "Beban Komisi", "expense", "debit"),
@@ -72,26 +88,54 @@ COA = [
     ("6-5000", "Beban Piutang Tidak Tertagih", "expense", "debit"),
 ]
 
-# (sku_code, name, modal/purchase_price, harga_jual/sale_price) — dari sheet KOMISI.
+# (name, modal_per_dus, isi_per_dus) — dikonfirmasi client 2026-08-13,
+# ditambah Absolut Vodka & Captain Morgan Apple pada 2026-08-18.
+#
+# PENTING: kolom modal adalah **harga per DUS**, bukan per botol. Sistem membagi
+# ke per-botol sendiri (lihat services/units.py). Salah membaca kolom ini sebagai
+# harga per botol membuat HPP & valuasi salah 12-48x.
+#
+# Isi per dus: Chivas 200ml = 24, Robinson Vodka = 48, sisanya 12.
+# SKU tidak diketik siapa pun — dibuat otomatis dari nama.
 PRODUCTS = [
-    ("CM",   "Captain Morgan Spiced Rum",   1600000, 2500000),
-    ("RBV",  "Robinson Vodka",              1300000, 3000000),
-    ("B",    "JW Black Label 750ml",        3700000, 4350000),
-    ("CHO",  "Chivas Regal 12 YO 750ml",    3700000, 4400000),
-    ("R",    "JW Red Label 750ml",          2800000, 3600000),
-    ("M",    "Martell VSOP",                6000000, 7800000),
-    ("H",    "Hennessy VSOP EU",            6500000, 8300000),
-    ("JMS30","Jameson 750ml",               3000000, 3700000),
-    ("JDO",  "Jack Daniel's",               3200000, 4000000),
-    ("SG",   "Singleton 12 Glenord",        5600000, 7000000),
-    ("GF",   "Glenfiddich 12 YO",           5500000, 6900000),
-    ("JS",   "Jose Cuervo Tequila",         2800000, 4000000),
-    ("GLV",  "Glenlivet 12 YO",             5000000, 6500000),
-    ("MCDC", "Macallan 12 Double Cask",    13500000,17000000),
-    ("MCTC", "Macallan 12 Triple Cask",    13500000,17000000),
-    ("MCSO", "Macallan 12 Sherry Oak",     14000000,18000000),
-    ("MTN",  "Martell Noblige",             6000000, 8000000),
-    ("SGN",  "Singleton 12 Lucious Nectar", 4000000, 6500000),
+    # Urutan mengikuti daftar resmi client (alfabetis) supaya bisa dicocokkan
+    # baris per baris saat client mengirim pembaruan berikutnya.
+    #
+    # Absolut Vodka bermodal 0 karena barangnya didapat GRATIS — ini angka
+    # yang benar, bukan data yang belum diisi. Jangan "diperbaiki" dengan
+    # menebak harga pasar. Akibat yang sudah diketahui & diterima client:
+    # laporan Komisi & GPM (yang memakai modal ACUAN dari master) menghitung
+    # marginnya 100%, sehingga komisi sales atas barang ini paling besar.
+    # HPP di Laba Rugi TIDAK terpengaruh — angka itu dari avg_cost hasil
+    # pembelian nyata.
+    ("Absolut Vodka",                       0, 12),
+    ("Azul Reposado",              30_000_000, 12),
+    ("Captain Morgan Apple",        1_740_000, 12),
+    ("Captain Morgan Spiced Gold",  1_600_000, 12),
+    ("Chivas 200ml",                1_800_000, 24),
+    ("Chivas Regal 12 YO",          3_700_000, 12),
+    ("Codigo Reposado",             8_500_000, 12),
+    ("Glenfiddich 12 YO",           5_000_000, 12),
+    ("Glenlivet 12 YO",             5_000_000, 12),
+    ("Hennessy VSOP",               7_000_000, 12),
+    ("Jack Daniel's",               3_200_000, 12),
+    ("Jameson",                     3_200_000, 12),
+    ("Jose Cuervo",                 2_800_000, 12),
+    # Catatan: client menyebut JW Black = 2.800.000, sama dengan JW Red.
+    # Sudah dikonfirmasi lewat daftar resmi client; kalau ternyata salah ketik,
+    # cukup ubah angka di baris ini lalu jalankan ulang seed.
+    ("JW Black Label",              2_800_000, 12),
+    ("JW Red Label",                2_800_000, 12),
+    ("Macallan 12 Double Cask",    13_500_000, 12),
+    ("Macallan 12 Sherry Oak",     14_000_000, 12),
+    ("Macallan 12 Triple Cask",    13_500_000, 12),
+    ("Mansion Vodka",               1_100_000, 12),
+    ("Mansion Whisky",              1_100_000, 12),
+    ("Martell Noblige",             6_000_000, 12),
+    ("Martell VSOP",                6_000_000, 12),
+    ("Robinson Vodka",              1_300_000, 48),
+    ("Singleton 12 Glenord",        5_500_000, 12),
+    ("Singleton 12 Lucious Nectar", 4_000_000, 12),
 ]
 
 # Customer riil hasil ekstraksi (noise seperti RETUR/SAMPLING dibuang).
@@ -118,9 +162,9 @@ ROLES = [
 
 
 async def run(seed_opening_stock: bool = False):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
+    # Tabel dibuat oleh `alembic upgrade head` (dijalankan entrypoint.sh lebih
+    # dulu), bukan di sini. Menambah model baru WAJIB punya revisi Alembik —
+    # jangan mengandalkan seed seperti dulu.
     async with SessionLocal() as db:
         existing = (await db.execute(
             select(Company).where(Company.name == COMPANY_NAME)
@@ -158,10 +202,17 @@ async def run(seed_opening_stock: bool = False):
         await db.flush()
 
         products: list[Product] = []
-        for sku, name, modal, hj in PRODUCTS:
+        for name, modal_per_dus, pack_size in PRODUCTS:
+            pack_modal = Decimal(modal_per_dus)
             p = Product(
-                company_id=company.id, sku=sku, name=name, kind="good",
-                unit="botol", sale_price=Decimal(hj), purchase_price=Decimal(modal),
+                company_id=company.id, sku=slug_sku(name), name=name,
+                kind="good",
+                # Stok & HPP dalam BOTOL; dus hanya satuan input/tampilan.
+                unit="botol", pack_unit="dus", pack_size=pack_size,
+                pack_purchase_price=pack_modal,
+                purchase_price=base_price_from_pack(pack_modal, pack_size),
+                # Harga jual TIDAK di master: ditentukan per customer saat faktur.
+                sale_price=Decimal("0"),
                 income_account_id=None, inventory_account_id=None,
                 cogs_account_id=None,
             )
@@ -170,6 +221,7 @@ async def run(seed_opening_stock: bool = False):
         await db.flush()
 
         if seed_opening_stock:
+            # avg_cost per BOTOL (purchase_price sudah per botol).
             for p in products:
                 db.add(StockLevel(product_id=p.id, warehouse_id=wh.id,
                                   quantity=Decimal("0"),

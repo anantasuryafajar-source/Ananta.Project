@@ -7,6 +7,7 @@ from .product import (
     ProductCategory, Product, StockLevel, StockMovement,
 )
 from .journal import Journal, JournalEntry
+from .stock_adjustment import StockAdjustment, StockAdjustmentLine
 from .invoice import Invoice, InvoiceLine, PaymentReceived
 from .purchase import Bill, BillLine, PaymentMade
 from .sequence import DocumentSequence
@@ -26,7 +27,8 @@ from .ai_chat import AiConversation, AiMessage
 __all__ = [
     "Base", "Company", "Warehouse", "User", "Role", "UserRole",
     "Account", "Contact", "ProductCategory", "Product", "StockLevel",
-    "StockMovement", "Journal", "JournalEntry", "Invoice", "InvoiceLine",
+    "StockMovement", "StockAdjustment", "StockAdjustmentLine",
+    "Journal", "JournalEntry", "Invoice", "InvoiceLine",
     "PaymentReceived", "Bill", "BillLine", "PaymentMade",
     "DocumentSequence", "AuditLog", "BankReconMark",
     "CourierExpense",

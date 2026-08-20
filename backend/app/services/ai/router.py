@@ -8,7 +8,11 @@ Kalau model kosong / "auto", router memilihkan model terbaik per mode,
 misalnya: Coding -> Claude, Marketing -> GPT.
 """
 from ...core.config import settings
+<<<<<<< HEAD
 from .constants import ALL_MODELS, DEFAULT_MODEL, OPENAI_MODELS
+=======
+from .constants import ALL_MODELS, ANTHROPIC_MODELS, DEFAULT_MODEL, OPENAI_MODELS
+>>>>>>> 30a7ae8a802df3762ef70adc784e73469dfd32a8
 
 # Peta mode -> model pilihan router (mode yang tak terdaftar pakai DEFAULT_MODEL).
 MODE_MODEL_MAP: dict[str, str] = {
@@ -34,20 +38,48 @@ def normalize_model(model: str | None) -> str | None:
 
 
 def route_model(mode: str, requested_model: str | None) -> str:
+<<<<<<< HEAD
     """Tentukan model final.
 
     1. Pilihan eksplisit user menang.
     2. Kalau tidak ada, pakai peta mode->model.
     3. Kalau model hasil router adalah GPT tapi OPENAI_API_KEY kosong,
        jatuhkan ke model Claude default supaya fitur tetap jalan.
+=======
+    """Tentukan model final berdasarkan pilihan user, mode, dan API key aktif.
+
+    - Pilihan eksplisit user tetap diprioritaskan bila provider-nya aktif.
+    - Bila provider pilihan tidak aktif, jatuhkan ke provider lain yang tersedia.
+    - OpenAI-only maupun Anthropic-only sama-sama didukung.
+>>>>>>> 30a7ae8a802df3762ef70adc784e73469dfd32a8
     """
     chosen = normalize_model(requested_model)
     if chosen is None:
         chosen = MODE_MODEL_MAP.get(mode) or settings.ANTHROPIC_MODEL or DEFAULT_MODEL
+<<<<<<< HEAD
     if chosen in OPENAI_MODELS and not settings.OPENAI_API_KEY:
         chosen = settings.ANTHROPIC_MODEL or DEFAULT_MODEL
     if chosen not in ALL_MODELS:
         chosen = DEFAULT_MODEL
+=======
+
+    has_openai = bool(settings.OPENAI_API_KEY)
+    has_anthropic = bool(settings.ANTHROPIC_API_KEY)
+
+    if chosen in OPENAI_MODELS and not has_openai:
+        if has_anthropic:
+            chosen = settings.ANTHROPIC_MODEL or DEFAULT_MODEL
+    elif chosen in ANTHROPIC_MODELS and not has_anthropic:
+        if has_openai:
+            preferred_openai = getattr(settings, "PROFILING_OPENAI_MODEL", "")
+            chosen = preferred_openai if preferred_openai in OPENAI_MODELS else "gpt-5.6-terra"
+
+    if chosen not in ALL_MODELS:
+        if has_openai:
+            chosen = "gpt-5.6-terra"
+        else:
+            chosen = DEFAULT_MODEL
+>>>>>>> 30a7ae8a802df3762ef70adc784e73469dfd32a8
     return chosen
 
 

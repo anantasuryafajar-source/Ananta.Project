@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import get_db
-from ..models import Invoice, User, Contact, Warehouse
+from ..models import Invoice, InvoiceLine, User, Contact, Warehouse
 from ..deps import current_user, require_roles
-from ..schemas.invoice import InvoiceIn, InvoiceOut
+from ..schemas.invoice import InvoiceCreatedOut, InvoiceIn, InvoiceOut
 from ..services.invoice_service import create_and_post_invoice
 from ..services.journal import JournalNotBalanced
+from ..services.units import NoWarehouse
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -28,6 +29,38 @@ async def list_invoices(
         stmt = stmt.where(Invoice.number.ilike(f"%{q.strip()}%"))
     stmt = stmt.offset(offset).limit(limit)
     return (await db.execute(stmt)).scalars().all()
+
+
+@router.get("/last-prices")
+async def last_prices(
+    contact_id: str = Query(..., description="customer yang mau dibuatkan faktur"),
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db),
+):
+    """Harga jual TERAKHIR untuk customer ini, per produk & satuan.
+
+    Harga jual tidak disimpan di master produk karena berbeda tiap customer dan
+    dinegosiasi per transaksi. Endpoint ini menggantikan peran "harga acuan":
+    form penjualan memakainya sebagai nilai awal, sales tetap bisa mengubah.
+    """
+    rows = (await db.execute(
+        select(InvoiceLine.product_id, InvoiceLine.unit,
+               InvoiceLine.unit_price, Invoice.date)
+        .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
+        .where(Invoice.company_id == user.company_id,
+               Invoice.contact_id == contact_id,
+               Invoice.status.in_(("posted", "paid", "overdue")),
+               InvoiceLine.product_id.isnot(None))
+        .order_by(Invoice.date.desc(), Invoice.created_at.desc())
+    )).all()
+
+    # Ambil yang paling baru per (produk, satuan) — hasil sudah terurut menurun.
+    seen: dict[tuple[str, str], dict] = {}
+    for product_id, unit, price, on_date in rows:
+        key = (product_id, unit)
+        if key not in seen:
+            seen[key] = {"product_id": product_id, "unit": unit,
+                         "unit_price": str(price), "date": on_date.isoformat()}
+    return list(seen.values())
 
 
 @router.get("/{invoice_id}/detail")
@@ -67,8 +100,13 @@ async def invoice_detail(
         },
         "lines": [{
             "description": l.description,
+            # quantity = botol (satuan dasar); qty_input & unit dipakai cetakan
+            # supaya faktur menampilkan "1 dus" & "5 botol" terpisah.
             "quantity": str(l.quantity),
+            "qty_input": str(l.qty_input),
+            "unit": l.unit,
             "unit_price": str(l.unit_price),
+            "note": l.note,
             "discount": str(l.discount),
             "tax_rate": str(l.tax_rate),
             "line_total": str(l.line_total),
@@ -76,7 +114,7 @@ async def invoice_detail(
     }
 
 
-@router.post("", response_model=InvoiceOut, status_code=201)
+@router.post("", response_model=InvoiceCreatedOut, status_code=201)
 async def create_invoice(
     body: InvoiceIn,
     user: User = Depends(require_roles("sales", "finance")),
@@ -91,7 +129,7 @@ async def create_invoice(
             lines_in=[l.model_dump() for l in body.lines], notes=body.notes,
         )
         await db.commit()
-    except JournalNotBalanced as e:
+    except (JournalNotBalanced, NoWarehouse) as e:
         await db.rollback()
         raise HTTPException(status_code=422, detail=str(e))
     except Exception:

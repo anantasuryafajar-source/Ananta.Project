@@ -3,11 +3,13 @@ from logging.config import fileConfig
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy import pool
 from alembic import context
-from app.core.config import settings
+from app.core.database import NORMALIZED_DATABASE_URL
 from app.models import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# URL yang sudah dinormalkan (driver asyncpg, tanpa query yang ditolak asyncpg).
+# '%' di-escape karena alembic.ini dibaca ConfigParser (password bisa memuat '%').
+config.set_main_option("sqlalchemy.url", NORMALIZED_DATABASE_URL.replace("%", "%%"))
 if config.config_file_name:
     fileConfig(config.config_file_name)
 
@@ -15,7 +17,7 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline():
-    context.configure(url=settings.DATABASE_URL, target_metadata=target_metadata,
+    context.configure(url=NORMALIZED_DATABASE_URL, target_metadata=target_metadata,
                       literal_binds=True, compare_type=True)
     with context.begin_transaction():
         context.run_migrations()

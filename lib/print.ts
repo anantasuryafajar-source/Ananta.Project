@@ -7,7 +7,8 @@ export type InvoiceDetail = {
   notes: string | null; subtotal: string; tax_total: string; total: string;
   paid_total: string; warehouse: string | null;
   contact: { name: string; address: string | null; phone: string | null; npwp: string | null };
-  lines: { description: string; quantity: string; unit_price: string; discount: string; tax_rate: string; line_total: string }[];
+  // qty_input & unit = jumlah/satuan seperti diketik ("1 dus"); quantity = botol.
+  lines: { description: string; quantity: string; qty_input?: string; unit?: string; unit_price: string; discount: string; tax_rate: string; line_total: string }[];
 };
 export type CompanyInfo = { name: string; npwp: string | null; address: string | null };
 
@@ -43,11 +44,18 @@ function openAndPrint(title: string, body: string) {
   w.document.close();
 }
 
+/** Jumlah untuk dicetak: pakai satuan yang diketik user, bukan hasil konversi.
+ *  Client ingin faktur menampilkan "1 dus" dan "5 botol" terpisah, bukan "29 botol". */
+function qtyCetak(l: InvoiceDetail["lines"][number]): string {
+  const jumlah = Number(l.qty_input ?? l.quantity);
+  return l.unit ? `${jumlah} ${l.unit}` : String(jumlah);
+}
+
 export function printInvoiceDoc(inv: InvoiceDetail, co: CompanyInfo) {
   const rows = inv.lines.map((l, i) => `
     <tr><td class="r" style="width:34px">${i + 1}</td>
     <td>${l.description}</td>
-    <td class="r">${Number(l.quantity)}</td>
+    <td class="r">${qtyCetak(l)}</td>
     <td class="r">${rp(l.unit_price)}</td>
     <td class="r">${Number(l.discount) > 0 ? rp(l.discount) : "—"}</td>
     <td class="r">${rp(l.line_total)}</td></tr>`).join("");
@@ -80,7 +88,7 @@ export function printDeliveryNote(inv: InvoiceDetail, co: CompanyInfo) {
   const rows = inv.lines.map((l, i) => `
     <tr><td class="r" style="width:34px">${i + 1}</td>
     <td>${l.description}</td>
-    <td class="r">${Number(l.quantity)}</td>
+    <td class="r">${qtyCetak(l)}</td>
     <td style="width:170px"></td></tr>`).join("");
   const body = `
     <div class="head">

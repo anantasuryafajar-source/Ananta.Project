@@ -8,13 +8,20 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..models import Product, StockLevel, StockMovement, Warehouse
+from .units import factor_for, format_qty, to_base
 
 CENT = Decimal("0.01")
 QTYQ = Decimal("0.0001")
+COSTQ = Decimal("0.0001")   # biaya per satuan, lihat UnitCost di models/base.py
 
 
 def _q(v) -> Decimal:
     return Decimal(str(v)).quantize(CENT)
+
+
+def _qc(v) -> Decimal:
+    """Biaya per satuan (avg_cost) — 4 desimal."""
+    return Decimal(str(v)).quantize(COSTQ)
 
 
 class TransferError(ValueError):
@@ -47,17 +54,24 @@ async def transfer_stock(
     moved = 0
     for raw in lines:
         pid = raw["product_id"]
-        qty = Decimal(str(raw["quantity"]))
+        product = (await db.execute(
+            select(Product).where(Product.id == pid)
+        )).scalar_one_or_none()
+
+        # Gudang boleh memindahkan per dus; stok tetap disimpan dalam botol.
+        factor = factor_for(raw.get("unit"), product.pack_size if product else 1)
+        qty = to_base(raw["quantity"], factor)
         if qty <= 0:
             continue
 
         src = await _level(db, pid, from_wh)
-        if src is None or Decimal(str(src.quantity)) < qty:
-            prod = (await db.execute(
-                select(Product.name).where(Product.id == pid)
-            )).scalar_one_or_none()
+        avail = Decimal(str(src.quantity)) if src else Decimal("0")
+        if avail < qty:
+            pack = product.pack_size if product else 1
             raise TransferError(
-                f"Stok tidak cukup di gudang asal untuk {prod or pid}."
+                f"Stok tidak cukup di gudang asal untuk "
+                f"{product.name if product else pid}: diminta "
+                f"{format_qty(qty, pack)}, tersedia {format_qty(avail, pack)}."
             )
 
         unit_cost = Decimal(str(src.avg_cost))
@@ -77,7 +91,7 @@ async def transfer_stock(
         new_q = old_q + qty
         new_avg = (old_q * old_avg + qty * unit_cost) / new_q if new_q > 0 else unit_cost
         dst.quantity = new_q.quantize(QTYQ)
-        dst.avg_cost = _q(new_avg)
+        dst.avg_cost = _qc(new_avg)
 
         # dua mutasi: keluar dari asal, masuk ke tujuan
         db.add(StockMovement(

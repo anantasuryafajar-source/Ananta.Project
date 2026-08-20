@@ -13,6 +13,8 @@ from .routers import (
     # --- Bot Telegram (langkah 1) ---
     telegram as telegram_router,
     ai_chat,
+    # --- penyesuaian stok (opname & stok awal) ---
+    stock_adjustments,
 )
 import logging
 from .bot.application import startup_bot, shutdown_bot
@@ -83,6 +85,7 @@ app.include_router(bulk_import.router, prefix=API)
 app.include_router(journals.router, prefix=API)
 app.include_router(audit.router, prefix=API)
 app.include_router(reconcile.router, prefix=API)
+app.include_router(stock_adjustments.router, prefix=API)
 
 # Bot Telegram: webhook di-mount TANPA prefix /api/v1 (Telegram POST ke URL bersih).
 app.include_router(telegram_router.router)

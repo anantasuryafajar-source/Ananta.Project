@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models import (
     Account, Journal, JournalEntry, Invoice, Product, StockLevel, Contact,
 )
+from .units import format_qty
 
 Z = Decimal("0")
 
@@ -176,18 +177,23 @@ async def ar_aging(db: AsyncSession, company_id: str, as_of: date) -> dict:
 
 
 async def stock_valuation(db: AsyncSession, company_id: str) -> dict:
+    """Valuasi stok. Kuantitas & avg_cost dalam BOTOL; `qty_display` menampilkan
+    ulang sebagai 'dus + botol' untuk dibaca manusia."""
     stmt = (
-        select(Product.sku, Product.name, StockLevel.quantity, StockLevel.avg_cost)
+        select(Product.sku, Product.name, Product.pack_size,
+               StockLevel.quantity, StockLevel.avg_cost)
         .join(StockLevel, StockLevel.product_id == Product.id)
         .where(Product.company_id == company_id)
-        .order_by(Product.sku)
+        .order_by(Product.name)
     )
     rows = (await db.execute(stmt)).all()
     items, total = [], Z
-    for sku, name, qty, avg in rows:
+    for sku, name, pack_size, qty, avg in rows:
         qty, avg = Decimal(str(qty)), Decimal(str(avg))
         value = (qty * avg)
         total += value
         items.append({"sku": sku, "name": name, "quantity": _f(qty),
+                      "pack_size": pack_size,
+                      "qty_display": format_qty(qty, pack_size),
                       "avg_cost": _f(avg), "value": _f(value)})
     return {"items": items, "total_value": _f(total)}

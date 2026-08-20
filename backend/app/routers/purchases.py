@@ -8,6 +8,7 @@ from ..deps import current_user, require_roles
 from ..schemas.purchase import BillIn, BillOut
 from ..services.purchase_service import create_and_post_bill
 from ..services.journal import JournalNotBalanced
+from ..services.units import NoWarehouse
 
 router = APIRouter(prefix="/bills", tags=["purchases"])
 
@@ -40,7 +41,7 @@ async def create_bill(
             lines_in=[l.model_dump() for l in body.lines], notes=body.notes,
         )
         await db.commit()
-    except JournalNotBalanced as e:
+    except (JournalNotBalanced, NoWarehouse) as e:
         await db.rollback()
         raise HTTPException(status_code=422, detail=str(e))
     except Exception:

@@ -1,10 +1,12 @@
 """Import massal master data dari Excel (baris sudah diparse frontend jadi JSON).
 
-- POST /products/import : upsert produk by SKU (baru dibuat, lama diperbarui)
+- POST /products/import : upsert produk by SKU, atau by nama bila SKU kosong
+  (kolom modal dibaca sebagai modal per DUS, sama seperti form & bot)
 - POST /contacts/import : upsert kontak by nama (case-insensitive)
 
 Baris gagal dilaporkan per-baris; baris lain tetap diproses.
 """
+import re
 from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -13,21 +15,56 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import get_db
 from ..models import Product, Contact, User
 from ..deps import require_roles
+from ..services.product_service import generate_sku
+from ..services.units import BASE_UNIT, PACK_UNIT, base_price_from_pack, clean_pack_size
 
 router = APIRouter(tags=["bulk-import"])
 
 
+# Pemisah RIBUAN: titik/koma yang diikuti TEPAT tiga angka, berulang sampai
+# akhir teks — mis. "1.800.000" atau "1,800,000". Pola ini yang membedakannya
+# dari pemisah desimal.
+_RIBUAN = re.compile(r"^\d{1,3}([.,]\d{3})+$")
+
+
 def _num(v, default="0") -> Decimal:
+    """Baca angka dari sel Excel, toleran gaya Indonesia maupun Inggris.
+
+    Sel bisa berisi teks seperti "Rp 1.800.000" (Indonesia) atau "1,800,000.50"
+    (Inggris). Aturannya:
+
+    - Kalau ADA titik dan koma sekaligus, yang MUNCUL TERAKHIR adalah desimal.
+    - Kalau hanya salah satu, dan bentuknya "grup tiga angka" -> pemisah ribuan.
+
+    Aturan grup tiga angka itu penting: `Decimal("600.000")` sah dibaca Python
+    sebagai 600, sehingga modal enam ratus ribu diam-diam tersimpan enam ratus
+    rupiah — lalu HPP dan valuasi persediaan ikut salah 1.000x.
+    """
     if v is None or str(v).strip() == "":
         return Decimal(default)
-    s = str(v).replace("Rp", "").replace(" ", "").strip()
+    s = str(v).replace("Rp", "").replace("rp", "").replace(" ", "").strip()
+    if not s:
+        return Decimal(default)
+
+    negatif = s.startswith("-")
+    s = s.lstrip("-+")
+
+    if "." in s and "," in s:
+        # Yang terakhir muncul adalah pemisah desimal.
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")   # 1.800.000,50
+        else:
+            s = s.replace(",", "")                     # 1,800,000.50
+    elif _RIBUAN.match(s):
+        s = s.replace(".", "").replace(",", "")        # 1.800.000 / 600.000
+    elif "," in s:
+        s = s.replace(",", ".")                        # 1500,75
+
     try:
-        return Decimal(s.replace(",", ""))            # 1,250,000 / 1250000.5
+        angka = Decimal(s)
     except InvalidOperation:
-        try:
-            return Decimal(s.replace(".", "").replace(",", "."))  # 1.250.000,50
-        except InvalidOperation:
-            raise ValueError(f"Angka tidak valid: {v}")
+        raise ValueError(f"Angka tidak valid: {v}")
+    return -angka if negatif else angka
 
 
 class RowsIn(BaseModel):
@@ -44,28 +81,42 @@ async def import_products(
     failed: list[dict] = []
     for i, r in enumerate(body.rows, start=1):
         try:
-            sku = str(r.get("sku") or "").strip()
             name = str(r.get("name") or "").strip()
-            if not sku or not name:
-                raise ValueError("Kolom sku dan name wajib diisi.")
-            existing = (await db.execute(
-                select(Product).where(Product.company_id == user.company_id,
-                                      Product.sku == sku)
-            )).scalar_one_or_none()
+            if not name:
+                raise ValueError("Kolom name wajib diisi.")
+            # SKU opsional: dipakai sebagai kunci upsert bila ada, kalau tidak
+            # produk dicocokkan per nama lalu SKU dibuat otomatis.
+            sku = str(r.get("sku") or "").strip()
+            stmt = select(Product).where(Product.company_id == user.company_id)
+            stmt = (stmt.where(Product.sku == sku) if sku
+                    else stmt.where(func.lower(Product.name) == name.lower()))
+            existing = (await db.execute(stmt)).scalar_one_or_none()
+
+            # Modal di Excel ditulis per DUS (cara client mencatat). Kolom
+            # `pack_size` = isi per dus; kosong -> default 12.
+            pack_size = clean_pack_size(r.get("pack_size") or r.get("isi_dus"))
+            pack_modal = _num(r.get("pack_purchase_price")
+                              or r.get("purchase_price"))
             vals = {
                 "name": name,
-                "unit": str(r.get("unit") or "").strip() or "pcs",
-                "sale_price": _num(r.get("sale_price")),
-                "purchase_price": _num(r.get("purchase_price")),
+                "unit": str(r.get("unit") or "").strip() or BASE_UNIT,
+                "pack_unit": PACK_UNIT,
+                "pack_size": pack_size,
+                "pack_purchase_price": pack_modal,
+                "purchase_price": base_price_from_pack(pack_modal, pack_size),
                 "min_stock": _num(r.get("min_stock")),
             }
             if existing:
                 for k, v in vals.items():
                     setattr(existing, k, v)
+                if sku:
+                    existing.sku = sku
                 updated += 1
             else:
-                db.add(Product(company_id=user.company_id, sku=sku,
-                               kind="good", **vals))
+                db.add(Product(
+                    company_id=user.company_id, kind="good",
+                    sku=sku or await generate_sku(db, user.company_id, name),
+                    **vals))
                 created += 1
             await db.commit()
         except Exception as e:

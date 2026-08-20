@@ -3,7 +3,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Plus, Trash2, FileCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { rupiah, tanggal } from "@/lib/format";
-import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -12,12 +11,13 @@ import { Input } from "@/components/ui/input";
 
 type SO = { id: string; number: string; date: string; status: string; delivery_status: string; total: string; invoice_id: string | null };
 type Contact = { id: string; name: string };
-type Product = { id: string; name: string; sale_price: string };
+type Product = { id: string; name: string; sale_price: string; purchase_price: string; pack_size: number };
 type Warehouse = { id: string; name: string };
-type Line = { product_id: string; description: string; quantity: string; unit_price: string; discount: string; tax_rate: string };
+type Line = { product_id: string; description: string; quantity: string; unit: "dus" | "botol"; unit_price: string; discount: string; tax_rate: string; note: string };
 
 const today = () => new Date().toISOString().slice(0, 10);
-const baris = (): Line => ({ product_id: "", description: "", quantity: "1", unit_price: "0", discount: "0", tax_rate: "0" });
+// Default "botol": kalau satuan lupa diganti, jumlahnya kurang — bukan 48x lebih.
+const baris = (): Line => ({ product_id: "", description: "", quantity: "1", unit: "botol", unit_price: "0", discount: "0", tax_rate: "0", note: "" });
 const STATUS: Record<string, string> = { draft: "text-ink-subtle", invoiced: "text-success", cancelled: "text-danger" };
 
 function lineTotal(l: Line) {
@@ -56,7 +56,7 @@ export default function SalesOrdersPage() {
   function setLine(i: number, patch: Partial<Line>) { setLines((ls) => ls.map((l, idx) => idx === i ? { ...l, ...patch } : l)); }
   function pilihProduk(i: number, pid: string) {
     const p = products.find((x) => x.id === pid);
-    setLine(i, { product_id: pid, description: p?.name ?? "", unit_price: p ? p.sale_price : lines[i].unit_price });
+    setLine(i, { product_id: pid, description: p?.name ?? "" });
   }
   const total = lines.reduce((s, l) => s + lineTotal(l), 0);
 
@@ -71,7 +71,7 @@ export default function SalesOrdersPage() {
         method: "POST",
         body: JSON.stringify({
           contact_id: contactId, date, warehouse_id: whId || null, courier_name: courier || null, notes: notes || null,
-          lines: valid.map((l) => ({ product_id: l.product_id || null, description: l.description || null, quantity: l.quantity, unit_price: l.unit_price || "0", discount: l.discount || "0", tax_rate: l.tax_rate || "0" })),
+          lines: valid.map((l) => ({ product_id: l.product_id || null, description: l.description || null, quantity: l.quantity, unit: l.unit, unit_price: l.unit_price || "0", discount: l.discount || "0", tax_rate: l.tax_rate || "0", note: l.note.trim() || null })),
         }),
       });
       setOpen(false); muat();
@@ -96,7 +96,6 @@ export default function SalesOrdersPage() {
 
   return (
     <>
-      <Topbar title="Sales Order" />
       <div className="p-6">
         <div className="mb-4 flex justify-end">
           <Button onClick={buka}><Plus size={16} /> Buat SO</Button>
@@ -174,6 +173,7 @@ export default function SalesOrdersPage() {
                 <thead><tr className="border-b border-line bg-surface-sunken text-left text-caption text-ink-muted">
                   <th className="px-2 py-2 font-medium">Produk</th>
                   <th className="px-2 py-2 text-right font-medium">Qty</th>
+                  <th className="px-2 py-2 font-medium">Satuan</th>
                   <th className="px-2 py-2 text-right font-medium">Harga</th>
                   <th className="px-2 py-2 text-right font-medium">Diskon</th>
                   <th className="px-2 py-2 text-right font-medium">Pajak %</th>
@@ -188,8 +188,16 @@ export default function SalesOrdersPage() {
                           {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </Select>
                         {!l.product_id && <input value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Deskripsi" className="w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-2 py-1 text-sm text-ink focus:border-primary focus:bg-surface focus:outline-none" />}
+                  {/* Keterangan khusus baris ini — tetap bisa diisi walau produk dipilih dari daftar. */}
+                  <input value={l.note} onChange={(e) => setLine(i, { note: e.target.value })} maxLength={255} placeholder="Keterangan item (opsional)" className="mt-1 w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-2 py-1 text-caption text-ink placeholder:text-ink-subtle focus:border-primary focus:bg-surface focus:outline-none" />
                       </td>
                       <td className="w-20 px-2 py-1.5"><NumCell value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
+                      <td className="w-24 px-2 py-1.5">
+                        <Select value={l.unit} onChange={(e) => setLine(i, { unit: e.target.value as "dus" | "botol" })}>
+                          <option value="botol">botol</option>
+                          <option value="dus">dus</option>
+                        </Select>
+                      </td>
                       <td className="w-28 px-2 py-1.5"><NumCell value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} /></td>
                       <td className="w-24 px-2 py-1.5"><NumCell value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value })} /></td>
                       <td className="w-16 px-2 py-1.5"><NumCell value={l.tax_rate} onChange={(e) => setLine(i, { tax_rate: e.target.value })} /></td>

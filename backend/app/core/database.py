@@ -24,6 +24,13 @@ _DROP_QUERY = {"sslmode", "pgbouncer", "channel_binding", "options"}
 
 
 def _normalize(url: str) -> tuple[str, bool]:
+    # Hanya URL Postgres yang dirapikan. URL lain (mis. sqlite+aiosqlite untuk
+    # pengembangan lokal) dikembalikan APA ADANYA — urlsplit/urlunsplit di bawah
+    # membuang '//' pada URL tanpa host sehingga 'sqlite+aiosqlite:///x.db'
+    # berubah jadi tidak valid.
+    if not url.startswith(("postgres://", "postgresql://", "postgresql+")):
+        return url, False
+
     if url.startswith("postgres://"):
         url = "postgresql+asyncpg://" + url[len("postgres://"):]
     elif url.startswith("postgresql://"):
@@ -38,6 +45,11 @@ def _normalize(url: str) -> tuple[str, bool]:
 
 
 _url, _tx_pooler = _normalize(settings.DATABASE_URL)
+
+# URL yang SUDAH dinormalkan — dipakai juga oleh alembic/env.py. Jangan pakai
+# settings.DATABASE_URL mentah di sana: scheme `postgres://` dan query `sslmode`
+# dari Supabase membuat asyncpg gagal connect saat `alembic upgrade head`.
+NORMALIZED_DATABASE_URL = _url
 
 if _tx_pooler:
     # Supabase Transaction pooler (6543): prepared statement TIDAK didukung.

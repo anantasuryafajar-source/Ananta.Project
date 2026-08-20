@@ -3,7 +3,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Plus, Trash2, Ban, Wallet } from "lucide-react";
 import { api } from "@/lib/api";
 import { rupiah, tanggal } from "@/lib/format";
-import { Topbar } from "@/components/ananta/topbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -14,11 +13,18 @@ type Bill = {
   total: string; paid_total: string;
 };
 type Contact = { id: string; name: string; type: string };
-type Product = { id: string; name: string; purchase_price: string };
+type Product = {
+  id: string; name: string;
+  purchase_price: string;        // modal per botol
+  pack_purchase_price: string;   // modal per dus
+  pack_size: number;
+};
 
 type Line = {
   product_id: string; description: string;
-  quantity: string; unit_cost: string; discount: string; tax_rate: string;
+  quantity: string; unit: "dus" | "botol";
+  unit_cost: string; discount: string; tax_rate: string;
+  note: string;   // keterangan khusus baris ini
 };
 
 const STATUS: Record<string, string> = {
@@ -27,9 +33,10 @@ const STATUS: Record<string, string> = {
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+// Pembelian dari supplier ASF umumnya per dus, jadi itu default di sini.
 const baris = (): Line => ({
-  product_id: "", description: "", quantity: "1",
-  unit_cost: "0", discount: "0", tax_rate: "0",
+  product_id: "", description: "", quantity: "1", unit: "dus",
+  unit_cost: "0", discount: "0", tax_rate: "0", note: "",
 });
 
 function lineTotal(l: Line): number {
@@ -66,6 +73,8 @@ export default function PembelianPage() {
   const [contactId, setContactId] = useState("");
   const [date, setDate] = useState(today());
   const [notes, setNotes] = useState("");
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
+  const [whId, setWhId] = useState("");
   const [lines, setLines] = useState<Line[]>([baris()]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -97,18 +106,35 @@ export default function PembelianPage() {
     setOpen(true);
     api<Contact[]>("/contacts?type=supplier").then(setContacts).catch(() => {});
     api<Product[]>("/products").then(setProducts).catch(() => {});
+    api<{ id: string; name: string }[]>("/warehouses")
+      .then((w) => { setWarehouses(w); if (w[0]) setWhId(w[0].id); }).catch(() => {});
   }
 
   function setLine(i: number, patch: Partial<Line>) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
+  /** Modal acuan mengikuti satuan baris: per dus atau per botol. */
+  function modalAcuan(p: Product | undefined, unit: string): string {
+    if (!p) return "0";
+    return unit === "dus" ? p.pack_purchase_price : p.purchase_price;
+  }
+
   function pilihProduk(i: number, pid: string) {
     const p = products.find((x) => x.id === pid);
     setLine(i, {
       product_id: pid,
       description: p?.name ?? "",
-      unit_cost: p ? p.purchase_price : lines[i].unit_cost,
+      unit_cost: modalAcuan(p, lines[i].unit),
     });
+  }
+
+  function pilihSatuan(i: number, unit: "dus" | "botol") {
+    const p = products.find((x) => x.id === lines[i].product_id);
+    setLine(i, { unit, ...(p ? { unit_cost: modalAcuan(p, unit) } : {}) });
+  }
+
+  function isiDus(l: Line): number | null {
+    return products.find((x) => x.id === l.product_id)?.pack_size ?? null;
   }
 
   const total = lines.reduce((s, l) => s + lineTotal(l), 0);
@@ -126,12 +152,16 @@ export default function PembelianPage() {
         body: JSON.stringify({
           contact_id: contactId,
           date,
+          warehouse_id: whId || null,
           notes: notes || null,
           lines: valid.map((l) => ({
             product_id: l.product_id || null,
             description: l.description || null,
+            // quantity & unit_cost mengikuti satuan yang dipilih di baris ini.
             quantity: l.quantity,
+            unit: l.unit,
             unit_cost: l.unit_cost || "0",
+            note: l.note.trim() || null,
             discount: l.discount || "0",
             tax_rate: l.tax_rate || "0",
           })),
@@ -148,7 +178,6 @@ export default function PembelianPage() {
 
   return (
     <>
-      <Topbar title="Pembelian / Pengadaan" />
       <div className="p-6">
         <div className="mb-4 flex justify-end">
           <Button onClick={bukaForm}><Plus size={16} /> Buat Pengadaan</Button>
@@ -217,6 +246,13 @@ export default function PembelianPage() {
                 {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             </Field>
+            {/* Gudang WAJIB terkirim: tanpa ini stok tidak bergerak padahal
+                jurnal tetap terbentuk — neraca dan gudang jadi bercerita beda. */}
+            <Field label="Gudang">
+              <Select value={whId} onChange={(e) => setWhId(e.target.value)} required>
+                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </Select>
+            </Field>
             <Field label="Tanggal">
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required
                 className="w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-3 py-2 text-sm text-ink focus:border-primary focus:bg-surface focus:outline-none" />
@@ -235,7 +271,8 @@ export default function PembelianPage() {
                 <thead><tr className="border-b border-line bg-surface-sunken text-left text-caption text-ink-muted">
                   <th className="px-2 py-2 font-medium">Produk / Deskripsi</th>
                   <th className="px-2 py-2 text-right font-medium">Qty</th>
-                  <th className="px-2 py-2 text-right font-medium">Harga Beli</th>
+                  <th className="px-2 py-2 font-medium">Satuan</th>
+                  <th className="px-2 py-2 text-right font-medium">Modal / Satuan</th>
                   <th className="px-2 py-2 text-right font-medium">Diskon</th>
                   <th className="px-2 py-2 text-right font-medium">Pajak %</th>
                   <th className="px-2 py-2 text-right font-medium">Subtotal</th>
@@ -254,8 +291,25 @@ export default function PembelianPage() {
                             placeholder="Deskripsi"
                             className="w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-2 py-1 text-sm text-ink focus:border-primary focus:bg-surface focus:outline-none" />
                         )}
+                        {/* Keterangan khusus baris ini — tetap bisa diisi walau produk
+                            dipilih dari daftar. Beda dari catatan nota di bawah form. */}
+                        <input value={l.note} onChange={(e) => setLine(i, { note: e.target.value })}
+                          maxLength={255} placeholder="Keterangan item (opsional)"
+                          className="mt-1 w-full rounded-[var(--radius-input)] border border-line bg-surface-sunken px-2 py-1 text-caption text-ink placeholder:text-ink-subtle focus:border-primary focus:bg-surface focus:outline-none" />
                       </td>
                       <td className="px-2 py-1.5 w-20"><NumCell value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
+                      <td className="px-2 py-1.5 w-24">
+                        <Select value={l.unit}
+                          onChange={(e) => pilihSatuan(i, e.target.value as "dus" | "botol")}>
+                          <option value="dus">dus</option>
+                          <option value="botol">botol</option>
+                        </Select>
+                        {l.unit === "dus" && isiDus(l) && (
+                          <span className="mt-0.5 block text-center text-caption text-ink-subtle">
+                            {isiDus(l)} btl
+                          </span>
+                        )}
+                      </td>
                       <td className="px-2 py-1.5 w-28"><NumCell value={l.unit_cost} onChange={(e) => setLine(i, { unit_cost: e.target.value })} /></td>
                       <td className="px-2 py-1.5 w-24"><NumCell value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value })} /></td>
                       <td className="px-2 py-1.5 w-16"><NumCell value={l.tax_rate} onChange={(e) => setLine(i, { tax_rate: e.target.value })} /></td>
