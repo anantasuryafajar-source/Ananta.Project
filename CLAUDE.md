@@ -226,6 +226,90 @@ total outstanding AR Aging harus sama persis dengan saldo akun 1-1200 di Neraca.
 Sepadan dengan tes valuasi stok vs akun Persediaan. Kalau gagal, ada jalur uang
 yang salah akun.
 
+### Aturan kelima: yang custom itu transaksinya, jurnalnya tetap riil
+
+Lembar Hitung (`profit_sheets`) — kalkulator kesepakatan yang menempel di
+faktur. Rancangan di `RANCANGAN-LEMBAR-HITUNG.md`, penjaganya
+`tests/test_profit_sheet.py`.
+
+1. **Lembar tidak pernah menyentuh Pendapatan, HPP, atau Persediaan.** Yang
+   dijurnal cuma hasilnya: `Dr Beban Bagi Hasil (6-1300) / Cr Utang Bagi Hasil
+   (2-1700)` dan `Dr Beban Komisi / Cr Utang Komisi`. Kalau ada yang menambah
+   `Line()` ke akun pendapatan/HPP/persediaan di `profit_sheet_service`, laba
+   kotor jadi bisa terkontaminasi kesepakatan dan aturan anti-double-counting
+   client batal.
+2. **`hpp_riil` dibaca dari `journal_entries`**, bukan dihitung ulang dari
+   stok — avg_cost sudah bergerak sejak faktur diposting. Dan sengaja TIDAK
+   bisa ditimpa user: kalau bisa, lembar berhenti bisa dipakai memeriksa
+   pembukuan. Yang boleh ditimpa `hpp_dasar_komisi`, dan selisihnya
+   ditampilkan berdampingan.
+3. **Hidden margin TIDAK dijurnal.** Ia turunan: `penjualan − hpp_riil −
+   bagian mitra`. Menjurnalnya sebagai pendapatan terpisah bikin laba dobel
+   dan persediaan melenceng.
+4. **`bagian_asf` WAJIB dievaluasi setelah semua baris `profit_bersama`.**
+   Kalau dibalik, komisi pihak ketiga terhitung dari profit bersama dan
+   nilainya dua kali lipat (4%×300=12, benarnya 4%×150=6). Angkanya tetap
+   masuk akal, jadi tidak akan ketahuan sampai ada yang protes bayarannya.
+   Dikunci di `test_komisi_pihak_ketiga_dari_bagian_asf_bukan_profit_bersama`.
+5. **Bagian mitra adalah BEBAN, bukan pembagian laba di bawah garis.** Dari
+   angka client: omzet 1.000 − HPP 600 − Andre 150 = 250 = hidden margin 100 +
+   bagian ASF 150. Angka 250 hanya keluar kalau 150-nya mengurangi laba.
+6. **Transfer terkunci sampai `invoice.status == "paid"`** — status, bukan
+   jurnal. Beban sudah diakui saat lembar disetujui.
+7. **`void_sheet` wajib dipakai untuk faktur yang tak akan pernah lunas.**
+   Tanpa itu, Utang Bagi Hasil & Utang Komisi menumpuk selamanya dengan angka
+   yang tidak akan pernah dibayar.
+8. **Daftar `DASAR` tertutup.** Custom = user mengetik ANGKA (modal
+   perjanjian, persen, pengurang). Custom ≠ user mendefinisikan RUMUS. Dasar
+   `nominal` adalah pintu darurat yang menyimpan angka, bukan aturan.
+
+Catatan nama: `pengurang_per_dus` sempat bernama `ongkir_per_dus` (0008) dan
+itu keliru — angka ini murni variabel pengurang komisi, tidak ada hubungannya
+dengan `courier_expenses` dan tidak pernah masuk jurnal. Diganti di 0009.
+
+### Aturan keenam: satu jenis hak, satu titik pengakuan
+
+Empat jenis uang keluar, dan masing-masing diakui di titik BERBEDA. Salah
+menaruhnya bikin beban dobel atau mendahului uangnya masuk.
+
+| Jenis | Diakui kapan | Jurnal | Kode |
+|---|---|---|---|
+| Komisi pihak ketiga | lembar hitung disetujui | 6-1100 / 2-1600 | `profit_sheet_service` |
+| Hak mitra (Andre) | lembar hitung disetujui | 6-1300 / 2-1700 | `profit_sheet_service` |
+| Insentif penjualan | tiap cicilan masuk | 6-1400 / 2-1800 | `payout_service` |
+| Bagi hasil omzet | tutup buku bulanan | 6-1500 / 2-1900 | `payout_service` |
+
+1. **Komisi TIDAK boleh diakrual ulang per cicilan.** `approve_sheet` sudah
+   mengakuinya penuh. Prorata untuk komisi hanya menentukan berapa yang boleh
+   DITRANSFER (`payout_service.porsi_komisi_cair` — fungsi murni, tidak
+   membuat jurnal). Dijaga `test_komisi_tidak_terjurnal_dua_kali`.
+2. **Insentif JUSTRU diakrual per cicilan**, karena dasarnya uang masuk
+   bersih. Mengakuinya saat faktur terbit = mengakui beban atas uang yang
+   belum tentu masuk. `payment_service.receive_payment` memanggil
+   `accrue_insentif_untuk_pembayaran` DI DALAM transaksi yang sama — kalau
+   akrualnya gagal, pembayarannya ikut batal, bukan diam-diam terlewat.
+   Dasarnya dipotong pengurang dari lembar hitung faktur itu; cicilan pelunas
+   menyerap sisa pembulatan supaya jumlahnya persis (Total − Pengurang).
+3. **Gerbang target butuh DUA syarat** (omzet ≥ 500jt DAN uang masuk bersih ≥
+   500jt). `or` di situ mencairkan ratusan juta atas penjualan yang uangnya
+   belum masuk.
+4. **Term 1 sudah cair tgl 16 tidak pernah ditarik kembali** walau target
+   meleset; yang hangus cuma Term 2 dan booster.
+5. **Angka tutup buku disusun SERVER** lewat `build_month_data`, bukan
+   dikirim UI. Kalau UI yang menjumlahkan omzet & uang masuk, dua tempat bisa
+   berbeda dan tidak ada yang tahu mana yang benar.
+6. **`close_month(terapkan=False)` adalah bawaan** — pratinjau tanpa jurnal.
+   Tutup buku memindahkan ratusan juta; harus dilihat orang, bukan otomatis.
+   Aman diulang: periode+penerima yang sudah diakrual dilewati.
+7. **Bagi hasil omzet diperlakukan BEBAN**, bukan pengurang ekuitas, karena
+   modelnya revenue share/royalty (flat 18%+14% atas omzet, tidak bergantung
+   laba). Kalau suatu saat ini benar dividen pemegang saham, akunnya pindah
+   ke ekuitas dan laba bersih semua periode lampau berubah.
+8. **Dividen dihitung dari omzet KOTOR** — sesuai kesepakatan client, dan
+   memang bisa melampaui laba. `generate_monthly_closing_report` memunculkan
+   peringatan kalau `laba_kotor` diisi dan total transfer melebihinya. Itu
+   alat kontrol, bukan penghalang: modul melapor, finance memutuskan.
+
 Penomoran dokumen memakai row-lock (`SELECT ... FOR UPDATE`) di `services/numbering.py`.
 Resolusi akun default per perusahaan lewat kode CoA di `services/accounts_map.py`.
 

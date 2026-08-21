@@ -72,6 +72,16 @@ async def receive_payment(
     # tanpa jadwal dilewati tanpa error.
     from .terms_service import settle_terms
     await settle_terms(db, invoice_id=invoice.id, amount=amount)
+
+    # Akui insentif penjualan atas porsi bersih uang yang baru masuk.
+    # Sengaja di sini, bukan saat faktur terbit: dasarnya adalah kas yang
+    # BENAR-BENAR diterima, jadi saldo Utang Insentif selalu mencerminkan
+    # hak yang sudah lahir. Ikut dalam transaksi yang sama — kalau akrualnya
+    # gagal, pembayarannya ikut batal, bukan diam-diam terlewat.
+    from .payout_service import accrue_insentif_untuk_pembayaran
+    await accrue_insentif_untuk_pembayaran(
+        db, company_id=company_id, user_id=user_id, invoice=invoice,
+        amount_paid=amount, on_date=on_date)
     return pay
 
 

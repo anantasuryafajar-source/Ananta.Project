@@ -2,7 +2,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, Truck, Wallet,
   BookOpen, Users, FileBarChart, Settings, Warehouse, Bike,
   ClipboardList, ClipboardCheck, PiggyBank, Receipt, Landmark, Sparkles,
-  HandCoins, Coins,
+  HandCoins, Coins, Split, Send, CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,7 +53,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/kas-bank", label: "Kas & Bank", icon: Wallet, kata: ["uang", "saldo", "bayar", "terima"] },
       { href: "/biaya", label: "Biaya Operasional", icon: Receipt, kata: ["pengeluaran", "beban", "ongkos"] },
       { href: "/komisi", label: "Komisi", icon: HandCoins, kata: ["sales", "bonus", "fee", "perantara"] },
+      { href: "/lembar-hitung", label: "Lembar Hitung", icon: Split, kata: ["bagi hasil", "mitra", "andre", "rusdi", "profit sharing"] },
       { href: "/uang-muka", label: "Uang Muka", icon: Coins, kata: ["dp", "down payment", "titipan", "advance"] },
+      { href: "/disbursement", label: "Disbursement", icon: Send, kata: ["transfer", "cair", "bayar komisi", "payout"] },
+      { href: "/tutup-buku", label: "Tutup Buku", icon: CalendarCheck, kata: ["closing", "bulanan", "dividen", "bonus", "target"] },
       { href: "/investor", label: "Investor", icon: PiggyBank, kata: ["modal", "setoran", "pemilik"] },
       { href: "/akuntansi", label: "Akuntansi", icon: BookOpen, kata: ["jurnal", "buku besar", "coa", "akun"] },
       { href: "/rekonsiliasi", label: "Rekonsiliasi Bank", icon: Landmark, kata: ["cocokkan", "mutasi bank"] },

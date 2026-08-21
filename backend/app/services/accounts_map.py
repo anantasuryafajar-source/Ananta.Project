@@ -46,7 +46,23 @@ AUTO_CREATE: dict[str, tuple[str, str, str, str]] = {
     # Komisi yang sudah disepakati tapi belum dibayar. Tanpa akun ini,
     # kewajiban itu tidak muncul di mana pun dan laba terlihat lebih besar
     # dari kenyataan.
+    "commission_expense": ("6-1100", "Beban Komisi", "expense", "debit"),
     "commission_payable": ("2-1600", "Utang Komisi", "liability", "credit"),
+    # Bagian mitra (mis. Andre) atas kesepakatan bagi hasil. BEBAN, bukan
+    # pembagian laba di bawah garis — lihat RANCANGAN-LEMBAR-HITUNG.md §2.
+    "profit_share_expense": ("6-1300", "Beban Bagi Hasil", "expense", "debit"),
+    "profit_share_payable": ("2-1700", "Utang Bagi Hasil", "liability", "credit"),
+    # Bonus penjualan internal 4,3% / 5,3% (+ booster 1%). Dasarnya UANG
+    # MASUK BERSIH, jadi diakui per cicilan — bukan sekaligus saat faktur.
+    "incentive_expense": ("6-1400", "Beban Insentif Penjualan", "expense", "debit"),
+    "incentive_payable": ("2-1800", "Utang Insentif Penjualan", "liability", "credit"),
+    # Bagi hasil omzet 18% + 14%. Diperlakukan BEBAN karena modelnya revenue
+    # share/royalty (flat atas omzet, tidak bergantung laba) — bukan dividen
+    # akuntansi yang mestinya mengurangi ekuitas. Kalau suatu saat ini benar
+    # pembagian laba pemegang saham, akunnya harus pindah ke ekuitas, dan
+    # laba bersih semua periode lampau akan berubah.
+    "revenue_share_expense": ("6-1500", "Beban Bagi Hasil Omzet", "expense", "debit"),
+    "revenue_share_payable": ("2-1900", "Utang Bagi Hasil Omzet", "liability", "credit"),
 }
 
 

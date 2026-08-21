@@ -55,6 +55,10 @@ COA = [
     # kewajiban itu tidak muncul di mana pun dan laba terlihat lebih besar
     # dari kenyataan. Lihat services/commission_service.py.
     ("2-1600", "Utang Komisi", "liability", "credit"),
+    # Bagian mitra atas kesepakatan bagi hasil yang belum ditransfer.
+    ("2-1700", "Utang Bagi Hasil", "liability", "credit"),
+    ("2-1800", "Utang Insentif Penjualan", "liability", "credit"),
+    ("2-1900", "Utang Bagi Hasil Omzet", "liability", "credit"),
     ("2-2000", "Utang Pajak", "liability", "credit"),
     ("2-3000", "Utang Investor", "liability", "credit"),
     # EKUITAS
@@ -81,6 +85,12 @@ COA = [
     # BEBAN OPERASIONAL (akun riil ASF)
     ("6-1000", "Beban Gaji & Bonus", "expense", "debit"),
     ("6-1100", "Beban Komisi", "expense", "debit"),
+    # Bagian mitra (Andre dkk) — BEBAN, karena mengurangi laba ASF.
+    ("6-1300", "Beban Bagi Hasil", "expense", "debit"),
+    # Bonus penjualan internal, dasarnya uang masuk bersih.
+    ("6-1400", "Beban Insentif Penjualan", "expense", "debit"),
+    # Bagi hasil omzet (revenue share 18% + 14%).
+    ("6-1500", "Beban Bagi Hasil Omzet", "expense", "debit"),
     ("6-2000", "Beban Ekspedisi & Ongkir", "expense", "debit"),
     ("6-2100", "Beban Entertainment & Nongkrong", "expense", "debit"),
     ("6-2200", "Beban Representasi", "expense", "debit"),
