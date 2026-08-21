@@ -174,8 +174,12 @@ class SchemeIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     # `manual` = pintu darurat kasus khusus: tidak menghitung apa pun,
     # angkanya diketik manusia.
-    type: str = Field(pattern="^(nominal|per_botol|persen_margin|persen_omzet|manual)$")
+    type: str = Field(
+        pattern="^(nominal|per_botol|persen_margin|persen_omzet"
+                "|persen_margin_min_ongkir|manual)$")
     value: Decimal = Decimal("0")
+    # Hanya untuk persen_margin_min_ongkir: tarif ongkir kesepakatan per dus.
+    ongkir_per_dus: Decimal | None = None
     default_for_contact_id: str | None = None
     default_for_product_id: str | None = None
     note: str | None = None
@@ -186,6 +190,7 @@ class SchemeOut(ORMModel):
     name: str
     type: str
     value: Decimal
+    ongkir_per_dus: Decimal | None
     default_for_contact_id: str | None
     default_for_product_id: str | None
     is_active: bool
@@ -212,7 +217,7 @@ async def create_scheme(
 ):
     sk = CommissionScheme(
         company_id=user.company_id, name=body.name, type=body.type,
-        value=body.value, note=body.note,
+        value=body.value, ongkir_per_dus=body.ongkir_per_dus, note=body.note,
         default_for_contact_id=body.default_for_contact_id,
         default_for_product_id=body.default_for_product_id,
     )
@@ -256,9 +261,11 @@ async def hitung_skema(
     if sk is None:
         raise HTTPException(status_code=404, detail="Skema tidak ditemukan.")
     try:
-        nilai = await commission_service.hitung_dari_skema(
+        r = await commission_service.rincian_skema(
             db, user.company_id, sk, invoice_id)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    return {"scheme_id": sk.id, "type": sk.type, "amount": str(nilai),
-            "manual": sk.type == "manual"}
+    # `langkah` dikirim supaya orang bisa MEMERIKSA angkanya, bukan cuma
+    # menerima hasil akhir yang tidak bisa dicek di kepala.
+    return {"scheme_id": sk.id, "type": sk.type, "amount": str(r["amount"]),
+            "langkah": r["langkah"], "manual": sk.type == "manual"}

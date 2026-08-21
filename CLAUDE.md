@@ -202,12 +202,19 @@ Rancangan lengkapnya di `RANCANGAN-KUSTOMISASI.md`. Penjaganya
    `reports.ar_aging` menaruhnya di ember `tanpa_tempo` — kalau tidak, kesepakatan
    "tagih saat order berikutnya" terbaca menunggak 90+ hari dan orang menagih
    customer yang tidak terlambat.
-7. **Skema komisi & termin adalah daftar TERTUTUP.** Tipe `manual` (komisi) dan
+7. **Tarif ongkir di `persen_margin_min_ongkir` BUKAN dari `courier_expenses`.**
+   `CommissionScheme.ongkir_per_dus` adalah tarif KESEPAKATAN dengan sales;
+   `courier_expenses.amount` adalah ongkir AKTUAL yang dibayar ke ekspedisi.
+   Keduanya sering berbeda dan tidak boleh saling menggantikan — memakai yang
+   salah berarti orang dibayar keliru. Jumlah dus dihitung PECAHAN (18 botol
+   dari dus isi 12 = 1,5 dus), bukan dibulatkan ke atas; itu keputusan bisnis,
+   dikunci di `test_dus_dihitung_pecahan_bukan_dibulatkan`.
+8. **Skema komisi & termin adalah daftar TERTUTUP.** Tipe `manual` (komisi) dan
    `custom` (termin) adalah pintu darurat yang menyimpan ANGKA, bukan aturan —
    keduanya tidak menghitung apa pun. Jangan pernah membuatnya menerima rumus
    yang dieksekusi sistem: begitu rumus bisa diketik user, angkanya berhenti bisa
    dijelaskan dan tidak bisa dites. Tambah tipe baru bernama jelas saja.
-8. **Skema di-snapshot ke baris komisi** (`scheme_type`, `scheme_value`), sama
+9. **Skema di-snapshot ke baris komisi** (`scheme_type`, `scheme_value`), sama
    seperti `unit_factor`. Jangan membaca ulang tarif dari master saat melapor.
 
 Catatan UI: satu faktur kini menghasilkan BEBERAPA baris di AR Aging (satu per

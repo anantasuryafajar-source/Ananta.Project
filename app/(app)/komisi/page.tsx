@@ -20,11 +20,13 @@ type Saran = {
   invoice_number: string; omzet: string; modal: string; margin: string;
   saran_5_persen_margin: string;
 };
-type Skema = { id: string; name: string; type: string; value: string };
+type Skema = { id: string; name: string; type: string; value: string; ongkir_per_dus: string | null };
+type Langkah = { label: string; nilai: string };
 
 const LABEL_TIPE: Record<string, string> = {
   nominal: "flat", per_botol: "per botol", persen_margin: "% margin",
-  persen_omzet: "% omzet", manual: "kasus khusus",
+  persen_omzet: "% omzet", persen_margin_min_ongkir: "% margin \u2212 ongkir",
+  manual: "kasus khusus",
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -46,7 +48,8 @@ export default function KomisiPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const [kelola, setKelola] = useState(false);
-  const [skemaBaru, setSkemaBaru] = useState({ name: "", type: "nominal", value: "" });
+  const [skemaBaru, setSkemaBaru] = useState({ name: "", type: "nominal", value: "", ongkir_per_dus: "" });
+  const [langkah, setLangkah] = useState<Langkah[]>([]);
   const [skemaError, setSkemaError] = useState<string | null>(null);
 
   const [bayar, setBayar] = useState<Komisi | null>(null);
@@ -68,15 +71,21 @@ export default function KomisiPage() {
     if (skemaBaru.type !== "manual" && !(Number(skemaBaru.value) > 0)) {
       return setSkemaError("Isi nilainya, atau pilih tipe Kasus khusus.");
     }
+    if (skemaBaru.type === "persen_margin_min_ongkir"
+        && !(Number(skemaBaru.ongkir_per_dus) > 0)) {
+      return setSkemaError("Isi tarif ongkir per dus-nya.");
+    }
     try {
       await api("/commissions/schemes", {
         method: "POST",
         body: JSON.stringify({
           name: skemaBaru.name.trim(), type: skemaBaru.type,
           value: skemaBaru.type === "manual" ? "0" : skemaBaru.value,
+          ongkir_per_dus: skemaBaru.type === "persen_margin_min_ongkir"
+            ? skemaBaru.ongkir_per_dus : null,
         }),
       });
-      setSkemaBaru({ name: "", type: "nominal", value: "" });
+      setSkemaBaru({ name: "", type: "nominal", value: "", ongkir_per_dus: "" });
       muatSkema();
     } catch (err) {
       setSkemaError(err instanceof Error ? err.message : "Gagal menyimpan skema.");
@@ -91,7 +100,7 @@ export default function KomisiPage() {
   }
 
   function buka() {
-    setFormError(null); setSaran(null); setForm({ ...KOSONG }); setOpen(true);
+    setFormError(null); setSaran(null); setLangkah([]); setForm({ ...KOSONG }); setOpen(true);
     api<Invoice[]>("/invoices")
       .then((all) => setInvoices(all.filter((i) => FAKTUR_SAH.has(i.status))))
       .catch(() => {});
@@ -105,6 +114,9 @@ export default function KomisiPage() {
   function pilihFaktur(id: string) {
     set("invoice_id", id);
     setSaran(null);
+    // Rincian lama milik faktur sebelumnya — buang, jangan sampai tertinggal
+    // di layar dan dikira menjelaskan faktur yang baru.
+    setLangkah([]);
     if (!id) return;
     api<Saran>(`/commissions/saran?invoice_id=${id}`).then(setSaran).catch(() => {});
   }
@@ -112,11 +124,12 @@ export default function KomisiPage() {
   /** Hitung nilai menurut skema. `manual` sengaja tidak menghitung apa pun. */
   async function pilihSkema(id: string) {
     set("scheme_id", id);
+    setLangkah([]);
     if (!id || !form.invoice_id) return;
     try {
-      const r = await api<{ amount: string; manual: boolean }>(
+      const r = await api<{ amount: string; manual: boolean; langkah: Langkah[] }>(
         `/commissions/schemes/${id}/hitung?invoice_id=${form.invoice_id}`);
-      if (!r.manual) set("amount", r.amount);
+      if (!r.manual) { set("amount", r.amount); setLangkah(r.langkah ?? []); }
     } catch { /* biarkan user mengetik sendiri */ }
   }
 
@@ -285,6 +298,20 @@ export default function KomisiPage() {
             </Field>
           )}
 
+          {langkah.length > 0 && (
+            <div className="rounded-[var(--radius-card)] bg-surface-sunken p-3">
+              <p className="text-caption text-ink-subtle">Cara angkanya didapat:</p>
+              <div className="mt-1 space-y-0.5">
+                {langkah.map((l, i) => (
+                  <div key={i} className="flex justify-between text-caption">
+                    <span className="text-ink-muted">{l.label}</span>
+                    <span className="tabular-nums text-ink">{l.nilai}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <Field label="Penerima komisi">
               <Input value={form.payee_name} onChange={(e) => set("payee_name", e.target.value)}
@@ -369,6 +396,7 @@ export default function KomisiPage() {
                   <option value="per_botol">Per botol terjual (Rp)</option>
                   <option value="persen_margin">Persen dari margin (%)</option>
                   <option value="persen_omzet">Persen dari omzet (%)</option>
+                  <option value="persen_margin_min_ongkir">Persen dari margin setelah potong ongkir (%)</option>
                   <option value="manual">Kasus khusus — ketik sendiri</option>
                 </Select>
               </Field>
@@ -378,6 +406,13 @@ export default function KomisiPage() {
                   onChange={(e) => setSkemaBaru((f) => ({ ...f, value: e.target.value }))} />
               </Field>
             </div>
+            {skemaBaru.type === "persen_margin_min_ongkir" && (
+              <Field label="Tarif ongkir per dus (Rp)"
+                hint="Tarif KESEPAKATAN dengan sales — bukan ongkir yang dibayar ke ekspedisi">
+                <Input type="number" min={0} value={skemaBaru.ongkir_per_dus}
+                  onChange={(e) => setSkemaBaru((f) => ({ ...f, ongkir_per_dus: e.target.value }))} />
+              </Field>
+            )}
             {skemaError && <p className="text-sm text-danger">{skemaError}</p>}
             <div className="flex justify-end">
               <Button type="button" onClick={simpanSkema}><Plus size={16} /> Tambah Skema</Button>

@@ -342,3 +342,61 @@ async def test_jadwal_salah_jumlah_membatalkan_seluruh_faktur(db):
                     "amount": "999"}],
         )
     await db.rollback()
+
+
+# --------------------------------------------- KOMISI BERTINGKAT (margin - ongkir)
+async def test_persen_margin_min_ongkir_kasus_nyata(db):
+    """Kasus client 2026-08-21: margin 360rb, ongkir 50rb/dus x 2 dus, lalu 4%.
+
+    (360.000 - 100.000) x 4% = 10.400.
+
+    Angka-angkanya dipilih supaya cocok dengan contoh yang diberikan client,
+    jadi kalau perhitungannya bergeser, tes ini yang memberi tahu.
+    """
+    c, wh, ct, p = await _setup(db)
+    # 2 dus x 12 botol; modal 6.000/botol = 144.000.
+    # Harga jual dipasang supaya margin persis 360.000 -> omzet 504.000.
+    inv = await _faktur(db, c, wh, ct, p, qty="2", harga="252000", unit="dus")
+    sk = CommissionScheme(company_id=c.id, name="4% setelah ongkir",
+                          type="persen_margin_min_ongkir", value=Decimal("4"),
+                          ongkir_per_dus=Decimal("50000"))
+    db.add(sk)
+    await db.flush()
+
+    r = await commission_service.rincian_skema(db, c.id, sk, inv.id)
+    assert r["amount"] == Decimal("10400.00")
+    # Rincian harus bisa dibaca manusia untuk memeriksa angkanya.
+    labels = [l["label"] for l in r["langkah"]]
+    assert "Margin" in labels and "Dasar komisi" in labels
+
+
+async def test_ongkir_lebih_besar_dari_margin_tidak_jadi_komisi_negatif(db):
+    """Komisi negatif berarti menagih uang ke sales — tidak boleh terjadi."""
+    c, wh, ct, p = await _setup(db)
+    inv = await _faktur(db, c, wh, ct, p, qty="1", harga="80000", unit="dus")
+    sk = CommissionScheme(company_id=c.id, name="4% setelah ongkir",
+                          type="persen_margin_min_ongkir", value=Decimal("4"),
+                          ongkir_per_dus=Decimal("500000"))
+    db.add(sk)
+    await db.flush()
+    assert await commission_service.hitung_dari_skema(db, c.id, sk, inv.id) \
+        == Decimal("0")
+
+
+async def test_dus_dihitung_pecahan_bukan_dibulatkan(db):
+    """18 botol dari dus isi 12 = 1,5 dus, bukan 2.
+
+    Keputusan bisnis, bukan kebetulan implementasi — dikunci di sini supaya
+    tidak berubah diam-diam.
+    """
+    c, wh, ct, p = await _setup(db)
+    # 18 botol @ 30.000 = omzet 540.000; modal 18 x 6.000 = 108.000
+    # margin 432.000 - (1,5 x 50.000 = 75.000) = 357.000 x 10% = 35.700
+    inv = await _faktur(db, c, wh, ct, p, qty="18", harga="30000", unit="botol")
+    sk = CommissionScheme(company_id=c.id, name="10% setelah ongkir",
+                          type="persen_margin_min_ongkir", value=Decimal("10"),
+                          ongkir_per_dus=Decimal("50000"))
+    db.add(sk)
+    await db.flush()
+    assert await commission_service.hitung_dari_skema(db, c.id, sk, inv.id) \
+        == Decimal("35700.00")

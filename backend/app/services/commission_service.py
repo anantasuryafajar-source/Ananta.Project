@@ -121,25 +121,41 @@ async def hitung_saran(db: AsyncSession, company_id: str, invoice_id: str) -> di
 async def hitung_dari_skema(
     db: AsyncSession, company_id: str, scheme, invoice_id: str,
 ) -> Decimal:
-    """Nilai komisi menurut sebuah skema. Lima tipe, daftar tertutup.
+    """Nilai komisi menurut sebuah skema. Daftar TERTUTUP, bukan mesin rumus.
 
     `manual` sengaja mengembalikan 0: ia pintu darurat untuk kasus khusus dan
     tidak menghitung apa pun — orang mengetik angkanya sendiri. Jangan
     membuatnya menerima rumus yang dieksekusi; begitu rumus bisa diketik user,
     angkanya berhenti bisa dijelaskan dan tidak ada yang bisa dites.
     """
+    return (await rincian_skema(db, company_id, scheme, invoice_id))["amount"]
+
+
+async def rincian_skema(
+    db: AsyncSession, company_id: str, scheme, invoice_id: str,
+) -> dict:
+    """Sama dengan `hitung_dari_skema`, tapi ikut mengembalikan cara sampainya.
+
+    Rincian ini ditampilkan di form pencatatan supaya orang bisa MEMERIKSA
+    angkanya sebelum menyimpan, bukan cuma menerima hasil akhir. Untuk komisi
+    bertingkat (margin dikurangi ongkir lalu dipersenkan), hasil akhirnya tidak
+    bisa dicek di kepala — tanpa rincian, salah tarif baru ketahuan saat orang
+    protes gajinya.
+    """
     tipe = scheme.type
     nilai = _q(scheme.value)
+    kosong = {"amount": Decimal("0"), "langkah": []}
 
     if tipe == "manual":
-        return Decimal("0")
+        return kosong
     if tipe == "nominal":
-        return nilai
+        return {"amount": nilai,
+                "langkah": [{"label": "Nominal disepakati", "nilai": str(nilai)}]}
 
     rows = (await db.execute(
         select(InvoiceLine.quantity, InvoiceLine.qty_input,
                InvoiceLine.unit_price, InvoiceLine.discount,
-               Product.purchase_price)
+               Product.purchase_price, Product.pack_size)
         .join(Product, Product.id == InvoiceLine.product_id, isouter=True)
         .where(InvoiceLine.invoice_id == invoice_id)
     )).all()
@@ -147,16 +163,55 @@ async def hitung_dari_skema(
     if tipe == "per_botol":
         # `quantity` SELALU botol (aturan dus/botol di services/units.py).
         # Memakai qty_input di sini salah 12-48x untuk baris bersatuan dus.
-        botol = sum((_q(q_base) for q_base, _, _, _, _ in rows), Decimal("0"))
-        return _q(botol * nilai)
+        botol = sum((_q(r[0]) for r in rows), Decimal("0"))
+        return {"amount": _q(botol * nilai),
+                "langkah": [{"label": "Botol terjual", "nilai": str(botol)},
+                            {"label": "Tarif per botol", "nilai": str(nilai)}]}
 
-    omzet = sum((_q(qi) * _q(pr) - _q(d) for _, qi, pr, d, _ in rows),
+    omzet = sum((_q(qi) * _q(pr) - _q(d) for _, qi, pr, d, _, _ in rows),
                 Decimal("0"))
     if tipe == "persen_omzet":
-        return _q(omzet * nilai / Decimal("100"))
+        return {"amount": _q(omzet * nilai / Decimal("100")),
+                "langkah": [{"label": "Omzet", "nilai": str(_q(omzet))},
+                            {"label": "Persen", "nilai": f"{nilai}%"}]}
+
+    modal = sum((_q(qb) * _q(hb) for qb, _, _, _, hb, _ in rows), Decimal("0"))
+    margin = _q(omzet - modal)
+
     if tipe == "persen_margin":
-        modal = sum((_q(qb) * _q(hb) for qb, _, _, _, hb in rows), Decimal("0"))
-        return _q((omzet - modal) * nilai / Decimal("100"))
+        return {"amount": _q(margin * nilai / Decimal("100")),
+                "langkah": [{"label": "Margin", "nilai": str(margin)},
+                            {"label": "Persen", "nilai": f"{nilai}%"}]}
+
+    if tipe == "persen_margin_min_ongkir":
+        tarif = _q(scheme.ongkir_per_dus)
+        # Jumlah dus = botol / isi per dus. Sengaja PECAHAN, bukan dibulatkan
+        # ke atas: penjualan 18 botol dari dus isi 12 dihitung 1,5 dus. Kalau
+        # ongkir sebenarnya ditagih per dus fisik utuh, bulatkan di sini —
+        # tapi itu keputusan bisnis, jangan diubah tanpa dibicarakan.
+        dus = Decimal("0")
+        for qb, _, _, _, _, pack in rows:
+            isi = Decimal(str(pack or 1))
+            if isi <= 0:
+                isi = Decimal("1")
+            dus += _q(qb) / isi
+        dus = dus.quantize(Decimal("0.0001"))
+        potongan = _q(dus * tarif)
+        # Ongkir yang melahap seluruh margin tidak boleh jadi komisi negatif —
+        # itu berarti menagih uang ke sales, bukan membayarnya.
+        dasar = margin - potongan
+        if dasar < 0:
+            dasar = Decimal("0")
+        return {
+            "amount": _q(dasar * nilai / Decimal("100")),
+            "langkah": [
+                {"label": "Margin", "nilai": str(margin)},
+                {"label": "Dus terkirim", "nilai": str(dus.normalize())},
+                {"label": f"Potong ongkir @ {tarif}", "nilai": f"-{potongan}"},
+                {"label": "Dasar komisi", "nilai": str(_q(dasar))},
+                {"label": "Persen", "nilai": f"{nilai}%"},
+            ],
+        }
 
     raise ValueError(f"Tipe skema '{tipe}' tidak dikenal.")
 

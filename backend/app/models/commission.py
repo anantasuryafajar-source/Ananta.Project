@@ -13,6 +13,9 @@ class CommissionScheme(Base, PKMixin, TimestampMixin):
         per_botol      value = tarif per BOTOL terjual
         persen_margin  value = persen dari margin faktur
         persen_omzet   value = persen dari nilai faktur
+        persen_margin_min_ongkir
+                       value = persen, DIKURANGI dulu tarif ongkir per dus
+                       (`ongkir_per_dus`) dikali jumlah dus di faktur
         manual         value diabaikan — orang mengetik angkanya sendiri
 
     `manual` adalah pintu darurat untuk kasus khusus yang belum terpikirkan.
@@ -35,6 +38,14 @@ class CommissionScheme(Base, PKMixin, TimestampMixin):
     type: Mapped[str] = mapped_column(String(20), index=True)
     # Rupiah untuk nominal/per_botol, persen untuk persen_*, diabaikan untuk manual.
     value: Mapped[object] = mapped_column(Money, default=0)
+
+    # Tarif ongkir KESEPAKATAN per dus, hanya untuk persen_margin_min_ongkir.
+    # SENGAJA bukan diambil dari `courier_expenses`: itu ongkir AKTUAL yang
+    # dibayar ke ekspedisi, sedangkan ini angka yang disepakati dengan sales.
+    # Dua-duanya sering beda, dan memakai yang salah berarti orang dibayar
+    # keliru. Kalau tarifnya beda per tujuan, timpa saja nilainya saat
+    # mencatat komisi — `amount` tetap sumber kebenarannya.
+    ongkir_per_dus: Mapped[object | None] = mapped_column(Money, nullable=True)
 
     # Default otomatis. Keduanya opsional; kalau dua-duanya kosong skema ini
     # hanya bisa dipilih manual saat mencatat komisi.
