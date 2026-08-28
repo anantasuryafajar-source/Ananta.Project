@@ -3,8 +3,9 @@
     python -m app.reset_transactions
 
 DIBUANG: jurnal, faktur, tagihan, pembayaran, PO/SO, biaya, kasbon, bagi hasil
-investor, penyesuaian stok, mutasi & saldo stok, ongkir kurir, penomoran
-dokumen, audit log.
+investor, penyesuaian stok, mutasi & saldo stok, ongkir kurir, lembar
+hitung, uang muka pelanggan, termin faktur, payout, penomoran dokumen,
+audit log.
 
 TETAP UTUH: akun pengguna + role, tautan & sesi bot Telegram, riwayat chat AI,
 perusahaan, gudang, bagan akun (CoA), kontak, dan master produk.
@@ -33,6 +34,16 @@ TABLES = [
     "courier_expenses", "investor_payouts", "expenses", "employee_loans",
     "stock_adjustment_lines", "stock_adjustments",
     "stock_movements", "stock_levels",
+    # Modul keuangan lanjutan. Keenamnya SEBENARNYA sudah ikut terhapus lewat
+    # CASCADE karena punya foreign key ke `journals`/`invoices` — tetapi
+    # mengandalkan itu berarti perintah ini melaporkan lebih sedikit daripada
+    # yang benar-benar dikosongkan, dan orang yang membaca keluarannya akan
+    # mengira uang muka pelanggan & lembar hitung masih utuh. Disebut eksplisit
+    # supaya laporannya jujur, sekaligus tetap benar bila suatu saat ada tabel
+    # sejenis yang tidak punya FK ke jurnal.
+    "profit_sheet_lines", "profit_sheets",
+    "advance_allocations", "customer_advances",
+    "invoice_terms", "payouts",
     "document_sequences", "audit_logs",
 ]
 
