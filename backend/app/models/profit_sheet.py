@@ -88,6 +88,18 @@ class ProfitSheet(Base, PKMixin, TimestampMixin):
     # tidak pernah masuk jurnal. Sempat bernama `ongkir_per_dus` dan itu keliru.
     pengurang_per_dus: Mapped[object] = mapped_column(Money, default=0)
 
+    # --- hasil antara, disimpan supaya angkanya bisa DITELUSURI ---
+    # Ketiganya turunan dan bisa dihitung ulang, tetapi disimpan karena
+    # dokumen keuangan harus bisa dibaca ulang tanpa menjalankan kembali
+    # rumusnya: "bagian ASF 150" harus tetap terbaca 150 bertahun-tahun
+    # kemudian, walau variabel kesepakatannya sudah tidak lagi dipahami.
+    profit_bersama: Mapped[object] = mapped_column(Money, default=0)
+    bagian_asf: Mapped[object] = mapped_column(Money, default=0)
+    # modal_perjanjian - hpp_riil. Hak internal penuh dan TIDAK PERNAH
+    # dijurnal; disimpan murni sebagai angka tampilan. Menjurnalnya sebagai
+    # pendapatan terpisah membuat laba dobel dan persediaan melenceng.
+    hidden_margin: Mapped[object] = mapped_column(Money, default=0)
+
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Jurnal pengakuan beban (saat disetujui) & jurnal baliknya (saat dibatalkan).
     journal_id: Mapped[str | None] = mapped_column(ForeignKey("journals.id"), nullable=True)

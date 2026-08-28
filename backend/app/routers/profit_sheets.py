@@ -6,6 +6,8 @@ sudah mendaftarkannya dan halaman Disbursement sudah memanggil
 
 Empat perintah, masing-masing satu titik dalam siklus hidup lembar:
 
+    GET  /profit-sheets/dasar                pilihan dasar hitung + artinya
+    POST /profit-sheets/pratinjau            hitung, TIDAK menyimpan apa pun
     POST /profit-sheets                      buat (draft, belum ada jurnal)
     POST /profit-sheets/{id}/approve         akui beban + utang
     POST /profit-sheets/lines/{id}/transfer  bayarkan satu hak (butuh faktur lunas)
@@ -23,7 +25,10 @@ from ..core.database import get_db
 from ..deps import current_user, require_roles
 from ..models import ProfitSheet, User
 from ..schemas.profit_sheet import (
+    DaftarDasarOut,
     LineOut,
+    PratinjauIn,
+    PratinjauOut,
     SheetDetailOut,
     SheetIn,
     SheetOut,
@@ -77,6 +82,47 @@ async def create_sheet(
         raise
     await db.refresh(sheet)
     return sheet
+
+
+@router.get("/dasar", response_model=DaftarDasarOut)
+async def daftar_dasar(user: User = Depends(current_user)):
+    """Pilihan dasar hitung & jenis baris beserta artinya.
+
+    Dikirim dari server, bukan ditulis ulang di frontend: daftarnya TERTUTUP
+    dan artinya menentukan uang siapa. Dua salinan pasti bergeser cepat atau
+    lambat, dan yang bergeser diam-diam adalah penjelasannya — bukan angkanya.
+    """
+    return ps.daftar_dasar()
+
+
+@router.post("/pratinjau", response_model=PratinjauOut)
+async def pratinjau(
+    body: PratinjauIn,
+    user: User = Depends(require_roles("finance")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Hitung tanpa menyimpan, supaya angkanya bisa dilihat sebelum disetujui.
+
+    Rollback di akhir bukan sekadar kehati-hatian: perhitungan membaca lewat
+    sesi yang sama, dan tanpa rollback objek yang sempat termuat bisa ikut
+    ter-flush oleh permintaan berikutnya.
+    """
+    try:
+        hasil = await ps.pratinjau(
+            db, company_id=user.company_id, invoice_id=body.invoice_id,
+            baris=[l.model_dump() for l in body.lines],
+            modal_perjanjian=body.modal_perjanjian,
+            hpp_dasar_komisi=body.hpp_dasar_komisi,
+            pengurang_per_dus=body.pengurang_per_dus,
+        )
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        await db.rollback()
+        raise
+    await db.rollback()
+    return hasil
 
 
 @router.post("/lines/{line_id}/transfer", response_model=LineOut)

@@ -35,6 +35,55 @@ class SheetIn(BaseModel):
     lines: list[LineIn]
 
 
+class PratinjauIn(BaseModel):
+    """Hitung tanpa menyimpan. Tanpa `date` — tidak ada dokumen yang dibuat."""
+    invoice_id: str
+    modal_perjanjian: Decimal | None = Field(default=None, ge=0)
+    hpp_dasar_komisi: Decimal | None = Field(default=None, ge=0)
+    pengurang_per_dus: Decimal = Field(default=Decimal("0"), ge=0)
+    lines: list[LineIn]
+
+
+class PratinjauLineOut(BaseModel):
+    payee_name: str
+    jenis: str
+    dasar: str
+    # Arti kode dasarnya, dikirim dari server supaya tidak ditulis ulang di UI.
+    keterangan_dasar: str
+    persen: Decimal
+    nominal: Decimal
+    basis_amount: Decimal
+    amount: Decimal
+
+
+class PratinjauOut(BaseModel):
+    invoice_number: str
+    penjualan: Decimal
+    hpp_riil: Decimal
+    hpp_dasar_komisi: Decimal
+    jumlah_dus: Decimal
+    margin_riil: Decimal
+    profit_bersama: Decimal
+    bagian_asf: Decimal
+    # modal perjanjian - HPP riil. Angka TAMPILAN; tidak pernah dijurnal.
+    hidden_margin: Decimal
+    total_hak: Decimal
+    # Dilaporkan, bukan ditolak di sini — pratinjau harus tetap menampilkan
+    # angkanya supaya user melihat seberapa jauh melesetnya.
+    melebihi_margin: bool
+    baris: list[PratinjauLineOut]
+
+
+class OpsiOut(BaseModel):
+    kode: str
+    keterangan: str
+
+
+class DaftarDasarOut(BaseModel):
+    dasar: list[OpsiOut]
+    jenis: list[OpsiOut]
+
+
 class TanggalIn(BaseModel):
     """Badan permintaan untuk menyetujui lembar."""
     date: date
@@ -85,6 +134,11 @@ class SheetOut(BaseModel):
     modal_perjanjian: Decimal | None = None
     hpp_dasar_komisi: Decimal | None = None
     pengurang_per_dus: Decimal
+    # Hasil antara, disimpan supaya dokumen bisa dibaca ulang tanpa
+    # menjalankan kembali rumusnya.
+    profit_bersama: Decimal
+    bagian_asf: Decimal
+    hidden_margin: Decimal
     notes: str | None = None
     journal_id: str | None = None
     void_reason: str | None = None

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Check, Ban, FileSpreadsheet } from "lucide-react";
+import { Plus, Trash2, Check, Ban, FileSpreadsheet, Calculator,
+         TriangleAlert } from "lucide-react";
 import { api } from "@/lib/api";
 import { rupiah, tanggal } from "@/lib/format";
 import { Topbar } from "@/components/ananta/topbar";
@@ -39,7 +40,21 @@ type Sheet = {
   id: string; number: string; date: string; invoice_id: string;
   status: string; penjualan: string; hpp_riil: string; jumlah_dus: string;
   modal_perjanjian: string | null; hpp_dasar_komisi: string | null;
-  pengurang_per_dus: string; notes: string | null; void_reason: string | null;
+  pengurang_per_dus: string;
+  profit_bersama: string; bagian_asf: string; hidden_margin: string;
+  notes: string | null; void_reason: string | null;
+};
+type Opsi = { kode: string; keterangan: string };
+type DaftarDasar = { dasar: Opsi[]; jenis: Opsi[] };
+type PratinjauBaris = {
+  payee_name: string; jenis: string; dasar: string; keterangan_dasar: string;
+  persen: string; nominal: string; basis_amount: string; amount: string;
+};
+type Pratinjau = {
+  invoice_number: string; penjualan: string; hpp_riil: string;
+  hpp_dasar_komisi: string; jumlah_dus: string; margin_riil: string;
+  profit_bersama: string; bagian_asf: string; hidden_margin: string;
+  total_hak: string; melebihi_margin: boolean; baris: PratinjauBaris[];
 };
 type SheetDetail = Sheet & { lines: Line[] };
 
@@ -48,21 +63,12 @@ type BarisInput = {
   dasar: string; persen: string; nominal: string; note: string;
 };
 
-/** Daftar TERTUTUP — cerminan models/profit_sheet.py::DASAR. */
-const DASAR: { nilai: string; label: string; jelas: string }[] = [
-  { nilai: "margin_riil", label: "Margin riil",
-    jelas: "penjualan − HPP riil" },
-  { nilai: "margin_komisi", label: "Margin versi kesepakatan",
-    jelas: "penjualan − HPP dasar komisi" },
-  { nilai: "margin_min_pengurang", label: "Margin − pengurang per dus",
-    jelas: "penjualan − HPP riil − (pengurang × dus)" },
-  { nilai: "profit_bersama", label: "Profit bersama",
-    jelas: "penjualan − modal perjanjian" },
-  { nilai: "bagian_asf", label: "Bagian ASF",
-    jelas: "profit bersama − seluruh hak mitra" },
-  { nilai: "omzet", label: "Omzet", jelas: "nilai faktur sebelum PPN" },
-  { nilai: "nominal", label: "Nominal tetap", jelas: "angka diketik langsung" },
-];
+/**
+ * Daftar dasar hitung sengaja TIDAK ditulis ulang di sini — diambil dari
+ * `/profit-sheets/dasar`. Daftarnya tertutup dan artinya menentukan uang
+ * siapa; dua salinan pasti bergeser cepat atau lambat, dan yang bergeser
+ * diam-diam biasanya penjelasannya, bukan angkanya.
+ */
 
 const LABEL_STATUS: Record<string, string> = {
   draft: "Draft", disetujui: "Disetujui", ditransfer: "Ditransfer",
@@ -89,6 +95,8 @@ export default function LembarHitungPage() {
   const [catatan, setCatatan] = useState("");
   const [baris, setBaris] = useState<BarisInput[]>([{ ...barisBaru }]);
 
+  const [opsi, setOpsi] = useState<DaftarDasar | null>(null);
+  const [pratinjau, setPratinjau] = useState<Pratinjau | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [error, setError] = useState("");
   const [sukses, setSukses] = useState("");
@@ -99,6 +107,7 @@ export default function LembarHitungPage() {
   useEffect(() => {
     muat();
     api<Invoice[]>("/invoices").then(setFaktur).catch(() => {});
+    api<DaftarDasar>("/profit-sheets/dasar").then(setOpsi).catch(() => {});
   }, []);
 
   function reset() {
@@ -107,33 +116,52 @@ export default function LembarHitungPage() {
     setCatatan(""); setBaris([{ ...barisBaru }]);
   }
 
+  /** Perubahan apa pun membatalkan pratinjau, supaya angka yang disetujui
+   *  tidak pernah berbeda dari angka yang disimpan. */
   function ubah(i: number, patch: Partial<BarisInput>) {
     setBaris((b) => b.map((r, n) => (n === i ? { ...r, ...patch } : r)));
+    setPratinjau(null);
   }
 
   const butuhModal = baris.some(
     (b) => b.dasar === "profit_bersama" || b.dasar === "bagian_asf");
   const butuhHppKomisi = baris.some((b) => b.dasar === "margin_komisi");
 
+  /** Isi yang dikirim ke server — sengaja satu, dipakai pratinjau & simpan. */
+  function badan() {
+    return {
+      invoice_id: invoiceId,
+      modal_perjanjian: modal === "" ? null : modal,
+      hpp_dasar_komisi: hppKomisi === "" ? null : hppKomisi,
+      pengurang_per_dus: pengurang || "0",
+      lines: baris
+        .filter((b) => b.payee_name.trim())
+        .map((b) => ({
+          payee_name: b.payee_name, jenis: b.jenis, dasar: b.dasar,
+          persen: b.persen || "0", nominal: b.nominal || "0",
+          note: b.note || null,
+        })),
+    };
+  }
+
+  async function hitung() {
+    setError(""); setSukses(""); setSibuk(true);
+    try {
+      setPratinjau(await api<Pratinjau>("/profit-sheets/pratinjau", {
+        method: "POST", body: JSON.stringify(badan()),
+      }));
+    } catch (e) {
+      setPratinjau(null);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally { setSibuk(false); }
+  }
+
   async function simpan() {
     setError(""); setSukses(""); setSibuk(true);
     try {
       const s = await api<SheetDetail>("/profit-sheets", {
         method: "POST",
-        body: JSON.stringify({
-          invoice_id: invoiceId, date: tgl,
-          modal_perjanjian: modal === "" ? null : modal,
-          hpp_dasar_komisi: hppKomisi === "" ? null : hppKomisi,
-          pengurang_per_dus: pengurang || "0",
-          notes: catatan || null,
-          lines: baris
-            .filter((b) => b.payee_name.trim())
-            .map((b) => ({
-              payee_name: b.payee_name, jenis: b.jenis, dasar: b.dasar,
-              persen: b.persen || "0", nominal: b.nominal || "0",
-              note: b.note || null,
-            })),
-        }),
+        body: JSON.stringify({ ...badan(), date: tgl, notes: catatan || null }),
       });
       setSukses(`Lembar ${s.number} dibuat sebagai draft. Periksa angkanya, lalu setujui.`);
       setDetail(s);
@@ -281,7 +309,7 @@ export default function LembarHitungPage() {
                 </thead>
                 <tbody>
                   {baris.map((b, i) => {
-                    const d = DASAR.find((x) => x.nilai === b.dasar);
+                    const d = opsi?.dasar.find((x) => x.kode === b.dasar);
                     return (
                       <tr key={i} className="border-b border-line/60 align-top">
                         <td className="py-2 pr-2">
@@ -291,19 +319,24 @@ export default function LembarHitungPage() {
                         <td className="px-2 py-2">
                           <Select value={b.jenis}
                                   onChange={(e) => ubah(i, { jenis: e.target.value as BarisInput["jenis"] })}>
-                            <option value="komisi">Komisi pihak luar</option>
-                            <option value="bagi_hasil">Hak mitra</option>
+                            {(opsi?.jenis ?? []).map((x) => (
+                              <option key={x.kode} value={x.kode}>
+                                {x.keterangan}
+                              </option>
+                            ))}
                           </Select>
                         </td>
                         <td className="px-2 py-2">
                           <Select value={b.dasar}
                                   onChange={(e) => ubah(i, { dasar: e.target.value })}>
-                            {DASAR.map((x) => (
-                              <option key={x.nilai} value={x.nilai}>{x.label}</option>
+                            {(opsi?.dasar ?? []).map((x) => (
+                              <option key={x.kode} value={x.kode}>{x.kode}</option>
                             ))}
                           </Select>
                           {d && (
-                            <p className="mt-1 text-caption text-ink-subtle">{d.jelas}</p>
+                            <p className="mt-1 text-caption text-ink-subtle">
+                              {d.keterangan}
+                            </p>
                           )}
                         </td>
                         <td className="px-2 py-2">
@@ -344,6 +377,10 @@ export default function LembarHitungPage() {
                       onClick={() => setBaris((b) => [...b, { ...barisBaru }])}>
                 <Plus size={16} /> Tambah baris
               </Button>
+              <Button variant="secondary" onClick={hitung}
+                      disabled={sibuk || !invoiceId || !baris.some((b) => b.payee_name.trim())}>
+                <Calculator size={16} /> Hitung
+              </Button>
               <Button onClick={simpan}
                       disabled={sibuk || !invoiceId || !baris.some((b) => b.payee_name.trim())}>
                 Simpan sebagai draft
@@ -352,6 +389,72 @@ export default function LembarHitungPage() {
                 Batal
               </Button>
             </div>
+
+            {pratinjau && (
+              <div className="mt-4 rounded-[var(--radius-card)] border border-line p-4">
+                <p className="text-sm text-ink">
+                  Hasil hitung untuk faktur <b>{pratinjau.invoice_number}</b> —
+                  belum ada yang disimpan.
+                </p>
+
+                {pratinjau.melebihi_margin && (
+                  <p className="mt-3 flex gap-2 rounded-[var(--radius-card)] border border-warning bg-surface-sunken p-3 text-sm text-ink">
+                    <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" />
+                    <span>
+                      Total hak {rupiah(pratinjau.total_hak)} melebihi margin
+                      riil {rupiah(pratinjau.margin_riil)} — menyimpan akan
+                      ditolak. Angkanya tetap ditampilkan supaya terlihat
+                      seberapa jauh melesetnya.
+                    </span>
+                  </p>
+                )}
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ["Penjualan", pratinjau.penjualan],
+                    ["HPP riil", pratinjau.hpp_riil],
+                    ["Margin riil", pratinjau.margin_riil],
+                    ["Profit bersama", pratinjau.profit_bersama],
+                    ["Bagian ASF", pratinjau.bagian_asf],
+                    ["Hidden margin", pratinjau.hidden_margin],
+                    ["Total hak", pratinjau.total_hak],
+                  ].map(([label, nilai]) => (
+                    <div key={label} className="rounded-[var(--radius-card)] bg-surface-sunken p-3">
+                      <p className="text-caption text-ink-subtle">{label}</p>
+                      <p className="mt-0.5 tabular-nums text-ink">{rupiah(nilai)}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <table className="mt-4 w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left text-caption text-ink-muted">
+                      <th className="py-2 pr-2 font-medium">Penerima</th>
+                      <th className="px-2 py-2 font-medium">Dihitung dari</th>
+                      <th className="px-2 py-2 text-right font-medium">Hak</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pratinjau.baris.map((b, i) => (
+                      <tr key={i} className="border-b border-line/60">
+                        <td className="py-2 pr-2 text-ink">{b.payee_name}</td>
+                        <td className="px-2 py-2 text-ink-muted">
+                          {b.dasar === "nominal"
+                            ? b.keterangan_dasar
+                            : `${Number(b.persen)}% dari ${rupiah(b.basis_amount)}`}
+                          <span className="ml-1 text-caption text-ink-subtle">
+                            ({b.keterangan_dasar})
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-right font-medium tabular-nums text-ink">
+                          {rupiah(b.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
         )}
 
@@ -402,10 +505,12 @@ export default function LembarHitungPage() {
 
             {detail.modal_perjanjian && (
               <p className="mt-3 text-caption text-ink-subtle">
-                Hidden margin{" "}
-                <b className="tabular-nums">
-                  {rupiah(String(Number(detail.modal_perjanjian) - Number(detail.hpp_riil)))}
-                </b>{" "}
+                Profit bersama{" "}
+                <b className="tabular-nums">{rupiah(detail.profit_bersama)}</b>,
+                bagian ASF{" "}
+                <b className="tabular-nums">{rupiah(detail.bagian_asf)}</b>,
+                hidden margin{" "}
+                <b className="tabular-nums">{rupiah(detail.hidden_margin)}</b>{" "}
                 — hak internal penuh, sengaja <b>tidak</b> dijurnal karena ia
                 turunan; menjurnalnya membuat laba dihitung dua kali.
               </p>

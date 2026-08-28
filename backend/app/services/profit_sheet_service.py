@@ -58,6 +58,22 @@ AKUN = {
     "bagi_hasil": ("profit_share_expense", "profit_share_payable"),
 }
 
+# Penjelasan tiap dasar hitung, dalam kalimat yang bisa dibaca orang keuangan.
+# Dikirim ke UI lewat endpoint /dasar supaya arti kodenya tidak perlu dihafal
+# dan tidak perlu ditulis ulang di frontend — satu sumber, tidak bisa geser.
+KETERANGAN_DASAR: dict[str, str] = {
+    "omzet": "Penjualan (sebelum PPN)",
+    "margin_riil": "Penjualan - HPP riil",
+    "margin_komisi": "Penjualan - HPP dasar komisi",
+    "margin_min_pengurang": "Penjualan - HPP riil - (pengurang per dus x dus)",
+    "profit_bersama": "Penjualan - Modal Perjanjian",
+    "bagian_asf": "Profit bersama - seluruh hak mitra",
+    "nominal": "Angka yang diketik langsung",
+}
+# Penjaga: daftar keterangan harus selalu menutupi seluruh DASAR, kalau tidak
+# UI akan menampilkan pilihan tanpa penjelasan (atau meledak saat mencarinya).
+assert set(KETERANGAN_DASAR) == set(DASAR), "KETERANGAN_DASAR tidak sinkron dengan DASAR"
+
 
 def _q(v) -> Decimal:
     return Decimal(str(v or 0)).quantize(CENT)
@@ -151,12 +167,16 @@ def _dasar_nilai(
     )
 
 
-def hitung_baris(
+def hitung_lembar(
     baris: list[dict], *, penjualan: Decimal, hpp_riil: Decimal,
     hpp_dasar_komisi: Decimal | None, modal_perjanjian: Decimal | None,
     pengurang_per_dus: Decimal, jumlah_dus: Decimal,
-) -> list[dict]:
-    """Hitung seluruh baris. Fungsi MURNI — tidak menyentuh database.
+) -> dict:
+    """Hitung seluruh lembar. Fungsi MURNI — tidak menyentuh database.
+
+    Dipakai `create_sheet` MAUPUN `pratinjau`, supaya angka yang dilihat user
+    sebelum menyimpan persis angka yang nanti tersimpan. Kalau pratinjau punya
+    rumusnya sendiri, dua sisi akan berbeda diam-diam.
 
     Dua lintasan, dan urutannya adalah aturan bisnis: `bagian_asf` adalah SISA
     setelah mitra bagi hasil mengambil bagiannya, jadi ia hanya bisa dihitung
@@ -221,10 +241,90 @@ def hitung_baris(
         if hasil[i] is None:
             hasil[i] = satu(raw, bagian_asf)
 
-    return [b for b in hasil if b is not None]
+    baris_jadi = [b for b in hasil if b is not None]
+    total_hak = _q(sum((b["amount"] for b in baris_jadi), Z))
+    margin_riil = _q(penjualan - hpp_riil)
+
+    # Bila tidak ada baris bagian_asf, nilainya tidak pernah dihitung di atas.
+    # Tetap disajikan supaya dokumen konsisten: profit bersama dikurangi hak
+    # mitra, berapa pun barisnya.
+    if bagian_asf is None and modal_perjanjian is not None:
+        hak_mitra = sum(
+            (b["amount"] for b in baris_jadi if b["jenis"] == "bagi_hasil"), Z)
+        bagian_asf = _q(_q(penjualan - modal_perjanjian) - hak_mitra)
+
+    return {
+        "baris": baris_jadi,
+        "penjualan": penjualan,
+        "hpp_riil": hpp_riil,
+        "hpp_dasar_komisi": _q(hpp_dasar_komisi
+                               if hpp_dasar_komisi is not None else hpp_riil),
+        "jumlah_dus": jumlah_dus,
+        "margin_riil": margin_riil,
+        "profit_bersama": (_q(penjualan - modal_perjanjian)
+                           if modal_perjanjian is not None else Z),
+        "bagian_asf": bagian_asf if bagian_asf is not None else Z,
+        # modal perjanjian - HPP sebenarnya. TIDAK pernah dijurnal.
+        "hidden_margin": (_q(modal_perjanjian - hpp_riil)
+                          if modal_perjanjian is not None else Z),
+        "total_hak": total_hak,
+        "melebihi_margin": total_hak > margin_riil,
+    }
 
 
 # ----------------------------------------------------------------- perintah
+
+async def pratinjau(
+    db: AsyncSession, *, company_id: str, invoice_id: str, baris: list[dict],
+    modal_perjanjian=None, hpp_dasar_komisi=None, pengurang_per_dus=None,
+) -> dict:
+    """Hitung tanpa menyimpan apa pun.
+
+    Menyetujui lembar memposting beban & utang, jadi angkanya harus bisa
+    dilihat lebih dulu. Sengaja memakai `hitung_lembar` yang SAMA dengan
+    `create_sheet`: kalau pratinjau punya rumusnya sendiri, dua sisi akan
+    berbeda diam-diam dan tidak ada yang tahu mana yang benar.
+    """
+    invoice = (await db.execute(
+        select(Invoice).where(Invoice.id == invoice_id,
+                              Invoice.company_id == company_id)
+    )).scalar_one_or_none()
+    if invoice is None:
+        raise ValueError("Faktur tidak ditemukan.")
+
+    penjualan = _q(invoice.subtotal)
+    hpp_riil = await _hpp_riil(db, company_id, invoice_id)
+    hitung = hitung_lembar(
+        baris, penjualan=penjualan, hpp_riil=hpp_riil,
+        hpp_dasar_komisi=_d(hpp_dasar_komisi),
+        modal_perjanjian=_d(modal_perjanjian),
+        pengurang_per_dus=_q(pengurang_per_dus),
+        jumlah_dus=await _jumlah_dus(db, invoice_id),
+    )
+    return {
+        "invoice_number": invoice.number,
+        **{k: v for k, v in hitung.items() if k != "baris"},
+        # `melebihi_margin` sengaja DILAPORKAN, bukan dijadikan error di sini:
+        # pratinjau harus tetap menampilkan angkanya supaya user bisa melihat
+        # seberapa jauh melesetnya. Penolakan terjadi saat menyimpan.
+        "baris": [
+            {**b, "keterangan_dasar": KETERANGAN_DASAR[b["dasar"]]}
+            for b in hitung["baris"]
+        ],
+    }
+
+
+def daftar_dasar() -> dict:
+    """Pilihan dasar hitung & jenis baris, beserta artinya, untuk UI."""
+    return {
+        "dasar": [{"kode": k, "keterangan": v}
+                  for k, v in KETERANGAN_DASAR.items()],
+        "jenis": [
+            {"kode": "komisi", "keterangan": "Komisi pihak ketiga/perantara"},
+            {"kode": "bagi_hasil", "keterangan": "Hak mitra bagi hasil"},
+        ],
+    }
+
 
 async def create_sheet(
     db: AsyncSession, *, company_id: str, user_id: str | None,
@@ -257,19 +357,20 @@ async def create_sheet(
     jumlah_dus = await _jumlah_dus(db, invoice_id)
     pengurang = _q(pengurang_per_dus)
 
-    dihitung = hitung_baris(
+    hitung = hitung_lembar(
         baris, penjualan=penjualan, hpp_riil=hpp_riil,
         hpp_dasar_komisi=_d(hpp_dasar_komisi),
         modal_perjanjian=_d(modal_perjanjian),
         pengurang_per_dus=pengurang, jumlah_dus=jumlah_dus,
     )
+    dihitung = hitung["baris"]
 
     # Jaring pengaman salah ketik persen. Margin RIIL yang jadi batas, bukan
     # margin perjanjian: yang benar-benar dimiliki ASF cuma sebesar itu, dan
     # membagi lebih dari itu berarti membayar dari modal kerja.
-    total_hak = _q(sum((b["amount"] for b in dihitung), Z))
-    margin_riil = _q(penjualan - hpp_riil)
-    if total_hak > margin_riil:
+    total_hak = hitung["total_hak"]
+    margin_riil = hitung["margin_riil"]
+    if hitung["melebihi_margin"]:
         raise ValueError(
             f"Total hak {total_hak:,.2f} melebihi margin riil faktur "
             f"{margin_riil:,.2f}. Periksa persentasenya."
@@ -286,6 +387,9 @@ async def create_sheet(
         modal_perjanjian=_d(modal_perjanjian),
         hpp_dasar_komisi=_d(hpp_dasar_komisi),
         pengurang_per_dus=pengurang, notes=notes, created_by=user_id,
+        profit_bersama=hitung["profit_bersama"],
+        bagian_asf=hitung["bagian_asf"],
+        hidden_margin=hitung["hidden_margin"],
         lines=[
             ProfitSheetLine(urutan=i, **b) for i, b in enumerate(dihitung)
         ],

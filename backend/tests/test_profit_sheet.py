@@ -175,6 +175,105 @@ async def test_lembar_tidak_mengubah_laba_kotor(db):
     assert await laba_kotor() == kotor_sebelum == Decimal("400.00")
 
 
+# ------------------------------------------------- HASIL ANTARA & PRATINJAU
+
+async def test_hasil_antara_disimpan_di_lembar(db):
+    """Profit bersama, bagian ASF & hidden margin harus bisa dibaca ulang
+    dari dokumen tanpa menjalankan lagi rumusnya."""
+    c, wh, ct, p = await _setup(db)
+    inv = await _faktur(db, c, wh, ct, p)
+    s = await ps.create_sheet(
+        db, company_id=c.id, user_id=None, invoice_id=inv.id,
+        on_date=date(2026, 1, 10), baris=BARIS_ANDRE, modal_perjanjian="700",
+    )
+    # omzet 1.000 - modal perjanjian 700
+    assert Decimal(str(s.profit_bersama)) == Decimal("300.00")
+    # profit bersama 300 - hak Andre 150
+    assert Decimal(str(s.bagian_asf)) == Decimal("150.00")
+    # modal perjanjian 700 - HPP riil 600
+    assert Decimal(str(s.hidden_margin)) == Decimal("100.00")
+
+
+async def test_hidden_margin_tidak_ikut_dijurnal(db):
+    """Disimpan sebagai angka TAMPILAN saja. Kalau ia ikut dijurnal, laba
+    dihitung dua kali."""
+    c, wh, ct, p = await _setup(db)
+    inv = await _faktur(db, c, wh, ct, p)
+    s = await ps.create_sheet(
+        db, company_id=c.id, user_id=None, invoice_id=inv.id,
+        on_date=date(2026, 1, 10), baris=BARIS_ANDRE, modal_perjanjian="700",
+    )
+    await ps.approve_sheet(db, company_id=c.id, user_id=None,
+                           sheet_id=s.id, on_date=date(2026, 1, 10))
+    # Laba tetap 235 — hidden margin 100 TIDAK menambahnya jadi 335.
+    pl = await reports.profit_loss(db, c.id, date(2026, 1, 1), date(2026, 1, 31))
+    assert Decimal(pl["net_profit"]) == Decimal("235.00")
+
+
+async def test_pratinjau_sama_dengan_yang_tersimpan(db):
+    """Angka yang dilihat user sebelum menyimpan harus persis angka yang
+    tersimpan — kalau pratinjau punya rumusnya sendiri, keduanya bergeser
+    diam-diam dan tidak ada yang tahu mana yang benar."""
+    c, wh, ct, p = await _setup(db)
+    inv = await _faktur(db, c, wh, ct, p)
+
+    pra = await ps.pratinjau(
+        db, company_id=c.id, invoice_id=inv.id, baris=BARIS_ANDRE,
+        modal_perjanjian="700",
+    )
+    assert pra["invoice_number"] == inv.number
+    assert pra["profit_bersama"] == Decimal("300.00")
+    assert pra["bagian_asf"] == Decimal("150.00")
+    assert pra["hidden_margin"] == Decimal("100.00")
+    assert pra["total_hak"] == Decimal("165.00")
+    assert pra["melebihi_margin"] is False
+    # Tiap baris membawa arti dasarnya, supaya UI tidak menyalin daftar itu.
+    assert pra["baris"][0]["keterangan_dasar"]
+
+    s = await ps.create_sheet(
+        db, company_id=c.id, user_id=None, invoice_id=inv.id,
+        on_date=date(2026, 1, 10), baris=BARIS_ANDRE, modal_perjanjian="700",
+    )
+    assert [b["amount"] for b in pra["baris"]] == [
+        Decimal(str(x.amount)) for x in s.lines]
+
+
+async def test_pratinjau_tidak_menyimpan_apa_pun(db):
+    c, wh, ct, p = await _setup(db)
+    inv = await _faktur(db, c, wh, ct, p)
+    await ps.pratinjau(db, company_id=c.id, invoice_id=inv.id,
+                       baris=BARIS_ANDRE, modal_perjanjian="700")
+    assert (await db.execute(select(ProfitSheet))).first() is None
+
+
+async def test_pratinjau_melaporkan_kelebihan_bukan_menolak(db):
+    """Menyimpan ditolak, tapi pratinjau harus tetap menampilkan angkanya
+    supaya user melihat seberapa jauh melesetnya."""
+    c, wh, ct, p = await _setup(db)
+    inv = await _faktur(db, c, wh, ct, p)
+    baris = [{"payee_name": "X", "jenis": "komisi",
+              "dasar": "omzet", "persen": "90"}]
+
+    pra = await ps.pratinjau(db, company_id=c.id, invoice_id=inv.id,
+                             baris=baris)
+    assert pra["melebihi_margin"] is True
+    assert pra["total_hak"] == Decimal("900.00")
+
+    with pytest.raises(ValueError, match="melebihi margin riil"):
+        await ps.create_sheet(db, company_id=c.id, user_id=None,
+                              invoice_id=inv.id, on_date=date(2026, 1, 10),
+                              baris=baris)
+
+
+def test_setiap_dasar_punya_keterangan():
+    """UI menampilkan daftar ini apa adanya; dasar tanpa penjelasan berarti
+    user memilih sesuatu yang tidak ia pahami."""
+    opsi = ps.daftar_dasar()
+    assert {o["kode"] for o in opsi["dasar"]} == set(ps.KETERANGAN_DASAR)
+    assert all(o["keterangan"].strip() for o in opsi["dasar"])
+    assert {o["kode"] for o in opsi["jenis"]} == {"komisi", "bagi_hasil"}
+
+
 # ------------------------------------------------------------ RUSDI
 async def test_rusdi_pengurang_per_dus(db):
     """(Penjualan - HPP - 50.000/dus x dus) x 4%.
