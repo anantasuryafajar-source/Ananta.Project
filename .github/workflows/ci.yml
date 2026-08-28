@@ -15,8 +15,10 @@ name: CI
 # filenya ada di disk mereka. Ketiga langkah di bawah menangkap persis itu,
 # dan menangkapnya pada push, bukan setelah deploy mati.
 on:
+  # Sengaja TANPA filter branch: kalau CI cuma jalan di main, ia menangkap
+  # commit yang tidak lengkap SETELAH masuk main — yaitu setelah deploy mati.
+  # Yang berguna justru sebaliknya, jalan di branch kerja sebelum di-merge.
   push:
-    branches: [main, staging]
   pull_request:
   workflow_dispatch:
 
