@@ -1,0 +1,80 @@
+name: CI
+
+# Kenapa workflow ini ada.
+#
+# 2026-08-28: satu commit meng-commit tes, dokumentasi, dan modul pendukung
+# fitur Lembar Hitung, tapi implementasi intinya (model, service, router,
+# migrasi 0009) tidak pernah ikut masuk git. Akibatnya di deploy:
+#
+#   1. `app/main.py` mengimpor router yang tidak ada -> ImportError saat
+#      startup -> SELURUH API mati, bukan cuma fitur itu; dan
+#   2. `0010_payout` menunjuk `down_revision` yang tidak ada -> `alembic
+#      upgrade head` berhenti, jadi tabelnya tidak pernah dibuat.
+#
+# Keduanya tidak terlihat sama sekali di working tree orang yang membuatnya —
+# filenya ada di disk mereka. Ketiga langkah di bawah menangkap persis itu,
+# dan menangkapnya pada push, bukan setelah deploy mati.
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Dikunci ke rentang requires-python di pyproject.toml (>=3.12,<3.14).
+          python-version: "3.12"
+
+      - name: Pasang dependensi
+        run: |
+          python -m pip install --upgrade pip uv
+          uv pip install --system -r pyproject.toml --group dev
+
+      - name: Aplikasi bisa diimpor
+        # Langkah termurah yang paling banyak menyelamatkan: kalau ada modul
+        # yang di-import tapi tidak pernah di-commit, gagalnya di sini —
+        # bukan saat gunicorn boot di produksi. Tes sendiri belum tentu
+        # menyentuh app.main, jadi ini TIDAK redundan dengan pytest.
+        run: python -c "import app.main; print('app.main OK')"
+
+      - name: Rantai migrasi utuh
+        # `alembic history` menyelesaikan seluruh down_revision tanpa perlu
+        # database. Revisi yang menunjuk revisi hilang gagal di sini.
+        run: alembic history
+
+      - name: Tes
+        # SQLite in-memory (tests/conftest.py) — tidak perlu Postgres.
+        run: pytest -q
+
+  frontend:
+    name: Frontend (tsc + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Periksa tipe
+        # `npm run lint` sengaja TIDAK dipakai: eslint tidak ada di
+        # dependencies dan `next lint` sudah dihapus di Next 16.
+        run: npx tsc --noEmit
+
+      - name: Build
+        # Menangkap yang lolos dari tsc: halaman yang gagal di-render,
+        # impor sisi server yang salah tempat, dan route yang tidak ada.
+        run: npm run build
