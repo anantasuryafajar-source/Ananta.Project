@@ -330,11 +330,79 @@ async def hard_delete_invoice(db: AsyncSession, *, company_id: str,
     for m in await _movements_of(db, inv.id):
         await _batalkan_mutasi(db, m)
 
-    # 4) hapus dokumen + SEMUA jurnalnya (termasuk jurnal balik pembatalan)
+    # 4) lepas/hapus SEMUA yang menunjuk ke faktur ini. Model punya cascade,
+    #    tapi foreign key di Postgres tidak — jadi baris anak harus dibereskan
+    #    eksplisit di sini, kalau tidak DELETE faktur ditolak dengan
+    #    ForeignKeyViolationError. (Bug ini lolos di tes karena SQLite tidak
+    #    menegakkan FK seketat Postgres.)
+    await _bersihkan_referensi_faktur(db, company_id=company_id, invoice_id=inv.id)
+
+    # 5) hapus dokumen + SEMUA jurnalnya (termasuk jurnal balik pembatalan)
     await db.delete(inv)  # lines ikut (cascade)
     await db.flush()
     await _delete_journals_of(db, inv.id)
     return number
+
+
+async def _bersihkan_referensi_faktur(
+    db: AsyncSession, *, company_id: str, invoice_id: str
+) -> None:
+    """Lepas/hapus semua baris di tabel lain yang menunjuk ke faktur ini.
+
+    Menghapus faktur adalah operasi yang jarang tapi harus tuntas: setiap
+    tabel baru yang menyimpan `invoice_id` WAJIB ditambahkan di sini, kalau
+    tidak penghapusan faktur akan gagal begitu tabel itu punya satu baris.
+
+    Aturan lepas vs hapus:
+      - Jadwal & alokasi murni turunan faktur -> hapus.
+      - Lembar hitung & payout yang SUDAH berjurnal -> jangan diam-diam
+        dihapus; itu menyembunyikan beban yang sudah diakui. Hentikan dan
+        minta orang membatalkannya lebih dulu, supaya jurnal baliknya jelas.
+    """
+    from ..models import (
+        InvoiceTerm, AdvanceAllocation, ProfitSheet, Payout,
+    )
+
+    # Lembar hitung yang sudah disetujui/ditransfer berarti ada beban komisi &
+    # bagi hasil yang sudah masuk buku. Menghapus faktur tanpa membalik itu
+    # meninggalkan utang menggantung. Tolak, arahkan ke pembatalan yang benar.
+    sheet = (await db.execute(
+        select(ProfitSheet).where(ProfitSheet.invoice_id == invoice_id,
+                                  ProfitSheet.status != "batal")
+    )).scalar_one_or_none()
+    if sheet is not None and sheet.status != "draft":
+        raise VoidError(
+            f"Faktur ini punya lembar hitung {sheet.number} yang sudah "
+            f"disetujui. Batalkan lembar itu dulu (jurnalnya dibalik), baru "
+            f"faktur bisa dihapus."
+        )
+
+    payout = (await db.execute(
+        select(Payout).where(Payout.invoice_id == invoice_id,
+                             Payout.status != "batal")
+    )).scalar_one_or_none()
+    if payout is not None:
+        raise VoidError(
+            f"Faktur ini sudah memunculkan hak insentif ({payout.number}). "
+            f"Batalkan hak itu dulu sebelum menghapus faktur."
+        )
+
+    # Sisanya aman dihapus: jadwal termin, alokasi DP, dan lembar draft.
+    for term in (await db.execute(
+        select(InvoiceTerm).where(InvoiceTerm.invoice_id == invoice_id)
+    )).scalars().all():
+        await db.delete(term)
+
+    for alloc in (await db.execute(
+        select(AdvanceAllocation).where(
+            AdvanceAllocation.invoice_id == invoice_id)
+    )).scalars().all():
+        await db.delete(alloc)
+
+    if sheet is not None:  # status draft -> belum ada jurnal, aman dihapus
+        await db.delete(sheet)  # baris lembar ikut via cascade ORM
+
+    await db.flush()
 
 
 async def hard_delete_bill(db: AsyncSession, *, company_id: str,
