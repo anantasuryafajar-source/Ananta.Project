@@ -71,6 +71,10 @@ export default function ProdukPage() {
 
   function muat() {
     api<Product[]>("/products").then(setItems).catch((e) => setError(e.message));
+    // Tetap dipanggil walau kolom "Nilai" sudah tidak ditampilkan: dari sini
+    // juga datangnya `qty_display` untuk kolom Stok ("1 dus 5 botol").
+    // Nilai persediaannya sendiri masih hidup di Laporan > Valuasi Stok dan
+    // tetap menjadi saldo akun 1-1400 di Neraca.
     api<Stock>("/reports/stock-valuation")
       .then((s) => setStock(Object.fromEntries(s.items.map((i) => [i.sku, i]))))
       .catch(() => {});
@@ -192,7 +196,6 @@ export default function ProdukPage() {
                 <th className="px-4 py-3 text-right font-medium">Modal / Dus</th>
                 <th className="px-4 py-3 text-right font-medium">Modal / Botol</th>
                 <th className="px-4 py-3 text-right font-medium">Stok</th>
-                <th className="px-4 py-3 text-right font-medium">Nilai</th>
                 <th className="w-16" />
               </tr></thead>
               <tbody>
@@ -212,7 +215,6 @@ export default function ProdukPage() {
                       <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{rupiah(p.purchase_price)}</td>
                       {/* Stok disimpan dalam botol, ditampilkan sebagai "1 dus 5 botol". */}
                       <td className="px-4 py-3 text-right tabular-nums text-ink-muted">{s ? s.qty_display : "0 botol"}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-ink">{s ? rupiah(s.value) : rupiah(0)}</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
                           <button onClick={() => bukaEdit(p)} title="Edit produk"
