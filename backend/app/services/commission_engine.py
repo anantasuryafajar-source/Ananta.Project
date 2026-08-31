@@ -243,8 +243,16 @@ def process_payment(
         Bonus Sales (4,3%)  = Dasar Bonus Masuk x 4,3%
         Komisi Siap Cair    = amount_paid x (Total Komisi / Total Invoice)
 
+    NILAI YANG DIKEMBALIKAN TIDAK DIBULATKAN. `net_bonus_basis`,
+    `commission_released`, dan `bonus_amount` adalah nilai sebenarnya dengan
+    seluruh pecahannya; yang membulatkan ke rupiah-sen adalah pemanggil, tepat
+    saat angka itu diposting ke jurnal. Membulatkan lebih awal membuat dasar
+    bonus sudah meleset sebelum dipakai menghitung bonusnya.
+    `amount_paid`, `total_dibayar`, dan `sisa_piutang` TETAP 2 desimal — itu
+    uang yang benar-benar berpindah, bukan hasil pembagian.
+
     `sudah_dibayar`, `sudah_dicairkan`, dan `sudah_basis` dipakai untuk
-    PEMBULATAN CICILAN TERAKHIR. Prorata per cicilan hampir selalu menyisakan
+    PENYERAPAN CICILAN TERAKHIR. Prorata per cicilan hampir selalu menyisakan
     pecahan sen; kalau tiap cicilan dibulatkan sendiri-sendiri, jumlah seluruh
     `commission_released` tidak akan sama persis dengan `total_komisi` — akan
     ada sisa utang komisi beberapa rupiah yang menggantung selamanya di
@@ -292,19 +300,27 @@ def process_payment(
     lunas = total_dibayar >= total
 
     if lunas:
-        # Cicilan pelunas menyerap sisa pembulatan: dasar bonus & komisi cair
-        # dihitung dari SELISIH total, bukan dari cicilan ini sendiri.
-        net_bonus_basis = _q(total - komisi) - _q(sudah_basis)
-        commission_released = komisi - _q(sudah_dicairkan)
+        # Cicilan pelunas menyerap SISA, dihitung dari selisih total — bukan
+        # dari cicilan ini sendiri. Dengan presisi penuh sisanya biasanya nol,
+        # tetapi penyerapan ini tetap wajib: pemanggil yang menyimpan
+        # akumulasinya ke kolom uang 2 desimal akan mengirim balik angka yang
+        # sudah dibulatkan, dan selisihnya harus jatuh di sini.
+        net_bonus_basis = (total - komisi) - _d(sudah_basis)
+        commission_released = komisi - _d(sudah_dicairkan)
     else:
-        net_bonus_basis = _q(bayar * net_ratio)
-        commission_released = _q(bayar * rasio_komisi)
+        # NILAI SEBENARNYA, tidak dibulatkan ke sen. Prorata hampir selalu
+        # menghasilkan pecahan (200/350 x 1.800.000 = 1.028.571,428571...),
+        # dan membulatkannya di sini berarti angka yang dipakai menghitung
+        # bonus sudah meleset sebelum sempat dipakai. Pembulatan ke rupiah-sen
+        # hanya terjadi di ujung, saat angka menyentuh jurnal.
+        net_bonus_basis = bayar * net_ratio
+        commission_released = bayar * rasio_komisi
 
     return PaymentResult(
         amount_paid=bayar,
         net_ratio=net_ratio,
         net_bonus_basis=net_bonus_basis,
-        bonus_amount=_q(net_bonus_basis * persen_bonus / HUNDRED),
+        bonus_amount=net_bonus_basis * persen_bonus / HUNDRED,
         commission_released=commission_released,
         total_dibayar=total_dibayar,
         sisa_piutang=_q(total - total_dibayar),

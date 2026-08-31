@@ -170,3 +170,106 @@ def test_bulan_kosong_tidak_error():
     r = generate_monthly_closing_report(MonthData(tahun=2026, bulan=3))
     assert r["disbursement_tgl1"]["total"] == "0.00"
     assert r["target"]["tercapai"] is False
+
+
+# ===================================================================
+# AKRUAL BONUS ATAS FAKTUR RUSDI — presisi penuh
+# (spesifikasi client 2026-08-31)
+#
+# Faktur 350.000.000, komisi Bokap Adin 1.800.000, dasar bonus 348.200.000.
+# Dua cicilan: 200.000.000 lalu 150.000.000 (pelunas).
+#
+# Dasar yang masuk ke mesin ini datang dari commission_engine.process_payment
+# TANPA dibulatkan; pembulatan ke rupiah-sen hanya saat angkanya menyentuh
+# jurnal. Tes di sini memastikan angka bonusnya benar dan akumulasinya pas.
+# ===================================================================
+from decimal import ROUND_HALF_UP
+
+from app.services.commission_engine import (
+    InvoiceData, SkemaKomisi, process_payment,
+)
+
+_FAKTUR = InvoiceData(
+    skema=SkemaKomisi.RUSDI_MARGIN,
+    total_invoice=D("350000000"),
+    total_hpp=D("300000000"),
+    total_dus=D("100"),
+)
+
+
+def _sen(v: D) -> D:
+    """Bulatkan ke rupiah-sen, seperti saat menjurnal."""
+    return v.quantize(D("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _dua_cicilan():
+    """200jt lalu 150jt pelunas, akumulasi disimpan dalam rupiah-sen."""
+    c1 = process_payment(_FAKTUR, D("200000000"))
+    c2 = process_payment(
+        _FAKTUR, D("150000000"), sudah_dibayar=D("200000000"),
+        sudah_dicairkan=_sen(c1.commission_released),
+        sudah_basis=_sen(c1.net_bonus_basis),
+    )
+    return c1, c2
+
+
+def test_akrual_term1_dari_dasar_presisi_penuh():
+    """4,3% x 198.971.428,571428... = 8.555.771,428571...
+
+    Yang diakui di jurnal 8.555.771,43 — pembulatan terjadi SEKALI, di ujung.
+    """
+    c1, _ = _dua_cicilan()
+    assert c1.net_bonus_basis == D("200000000") * D("3482") / D("3500")
+
+    bonus_nyata = c1.net_bonus_basis * D("4.3") / D("100")
+    # Dibandingkan dengan pecahan EKSAK, bukan angka desimal yang diketik
+    # tangan: 198.971.428,571428... tidak pernah habis, jadi menuliskannya
+    # sebagai literal selalu berarti memotongnya di suatu digit.
+    assert bonus_nyata == D("200000000") * D("3482") / D("3500") * D("43") / D("1000")
+    # Pecahannya memang tidak bulat — inilah yang tidak boleh hilang di tengah.
+    assert bonus_nyata != _sen(bonus_nyata)
+    # Yang diakui di jurnal, setelah dibulatkan SEKALI di ujung.
+    assert _sen(bonus_nyata) == D("8555771.43")
+
+
+def test_dua_cicilan_masuk_term_yang_sama_berjumlah_pas():
+    """Keduanya di tgl 1-15: dasar Term 1 harus pas 348.200.000."""
+    c1, c2 = _dua_cicilan()
+    data = MonthData(
+        tahun=2026, bulan=3, omzet_penjualan=D("350000000"),
+        pembayaran=[
+            _bayar(5, str(_sen(c1.net_bonus_basis)),
+                   str(_sen(c1.commission_released))),
+            _bayar(12, str(_sen(c2.net_bonus_basis)),
+                   str(_sen(c2.commission_released)), lunas=True),
+        ],
+    )
+    b = calculate_bonus(data)
+    assert b.basis_term1 == D("348200000.00")
+    assert b.basis_term2 == D("0.00")
+    # 4,3% x 348.200.000 = 14.972.600 tepat.
+    assert b.bonus_tgl16 == D("14972600.00")
+
+
+def test_jumlah_bonus_per_cicilan_sama_dengan_bonus_sekaligus():
+    """Memecah pembayaran tidak boleh mengubah total bonusnya.
+
+    Inilah bukti tidak ada pecahan yang hilang: 4,3% dihitung dua kali atas
+    dua cicilan harus sama dengan 4,3% atas keseluruhan.
+    """
+    c1, c2 = _dua_cicilan()
+    per_cicilan = (_sen(c1.net_bonus_basis * D("4.3") / D("100"))
+                   + _sen(c2.net_bonus_basis * D("4.3") / D("100")))
+    sekaligus = _sen(D("348200000") * D("4.3") / D("100"))
+    assert per_cicilan == sekaligus == D("14972600.00")
+
+
+def test_komisi_dan_dasar_bonus_menutup_nilai_faktur():
+    """Komisi + dasar bonus harus persis senilai faktur — tidak ada yang
+    tercecer di antara keduanya."""
+    c1, c2 = _dua_cicilan()
+    komisi = _sen(c1.commission_released) + _sen(c2.commission_released)
+    dasar = _sen(c1.net_bonus_basis) + _sen(c2.net_bonus_basis)
+    assert komisi == D("1800000.00")
+    assert dasar == D("348200000.00")
+    assert komisi + dasar == D("350000000.00")

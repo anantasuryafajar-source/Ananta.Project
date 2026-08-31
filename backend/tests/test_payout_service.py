@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import select
 from app.models import (
     Company, Warehouse, Contact, Product, StockLevel, Account, Payout,
+    JournalEntry,
 )
 from app.services.invoice_service import create_and_post_invoice
 from app.services.accounts_map import DEFAULT_CODES
@@ -305,3 +306,112 @@ async def test_disbursement_memisahkan_lunas_dan_tertahan(db):
     assert d["total_siap"] == "40.00"
     # Insentif dari pembayaran tadi ikut muncul sebagai hak internal.
     assert any(h["jenis"] == "insentif" for h in d["hak_internal"])
+
+
+# ==================================================================
+# FAKTUR RUSDI — keseimbangan jurnal pada cicilan pelunas
+# (spesifikasi client 2026-08-31)
+#
+# 100 dus @ 3.500.000 = 350.000.000, HPP 300.000.000, komisi Bokap Adin
+# 1.800.000, dasar bonus 348.200.000. Dibayar 200jt lalu 150jt.
+#
+# Yang diuji di sini BUKAN rumusnya (itu di test_commission_engine) melainkan
+# akibatnya di buku besar: tiap jurnal seimbang, dan akumulasi dasar insentif
+# berhenti PAS di 348.200.000 tanpa pecahan tercecer.
+# ==================================================================
+
+async def _faktur_rusdi(db, c, wh, ct, p):
+    """100 unit @ 3.500.000 dengan HPP 3.000.000/unit (pack_size 1)."""
+    p.purchase_price = D("3000000")
+    lvl = (await db.execute(select(StockLevel).where(
+        StockLevel.product_id == p.id))).scalar_one()
+    lvl.quantity, lvl.avg_cost = D("1000"), D("3000000")
+    await db.flush()
+    return await create_and_post_invoice(
+        db, company_id=c.id, user_id=None, contact_id=ct.id,
+        on_date=date(2026, 3, 5), warehouse_id=wh.id,
+        lines_in=[{"product_id": p.id, "quantity": "100",
+                   "unit_price": "3500000"}])
+
+
+async def _jurnal_timpang(db) -> int:
+    """Berapa jurnal yang debet != kreditnya. Harus selalu nol."""
+    rows = (await db.execute(
+        select(JournalEntry.journal_id, JournalEntry.debit,
+               JournalEntry.credit))).all()
+    per_jurnal: dict[str, D] = {}
+    for jid, debit, kredit in rows:
+        per_jurnal[jid] = per_jurnal.get(jid, D("0")) + D(str(debit)) - D(str(kredit))
+    return sum(1 for selisih in per_jurnal.values() if selisih != 0)
+
+
+async def test_rusdi_dua_cicilan_jurnal_seimbang_dan_dasar_pas(db):
+    """Dua cicilan (200jt + 150jt) atas faktur 350jt.
+
+    Faktur ini tidak punya lembar hitung, jadi seluruh nilainya jadi dasar
+    insentif — yang diuji adalah akumulasinya berhenti PAS di nilai faktur
+    dan tiap jurnal tetap seimbang.
+    """
+    c, wh, ct, p = await _setup(db)
+    inv = await _faktur_rusdi(db, c, wh, ct, p)
+    assert D(str(inv.total)) == D("350000000.00")
+
+    await payment_service.receive_payment(
+        db, company_id=c.id, user_id=None, invoice_id=inv.id,
+        on_date=date(2026, 3, 5), amount=D("200000000"))
+    await payment_service.receive_payment(
+        db, company_id=c.id, user_id=None, invoice_id=inv.id,
+        on_date=date(2026, 3, 12), amount=D("150000000"))
+    await db.commit()
+
+    assert await _jurnal_timpang(db) == 0
+
+    dasar = (await db.execute(
+        select(Payout.dasar).where(Payout.company_id == c.id,
+                                   Payout.jenis == "insentif"))).scalars().all()
+    assert sum((D(str(x)) for x in dasar), D("0")) == D("350000000.00")
+
+    # Beban insentif = 4,3% x 350.000.000, tanpa pecahan tercecer.
+    assert await _saldo(db, c.id, "6-1400") == D("15050000.00")
+    assert await _saldo(db, c.id, "2-1800", "neraca") == D("15050000.00")
+
+
+async def test_rusdi_dasar_dipotong_komisi_berhenti_pas_348_2_juta(db):
+    """Dengan lembar hitung komisi 1.800.000, dasar insentif harus berhenti
+    tepat di 348.200.000 — bukan 348.199.999,99 atau 348.200.000,01."""
+    c, wh, ct, p = await _setup(db)
+    inv = await _faktur_rusdi(db, c, wh, ct, p)
+
+    s = await ps.create_sheet(
+        db, company_id=c.id, user_id=None, invoice_id=inv.id,
+        on_date=date(2026, 3, 5),
+        baris=[{"payee_name": "Bokap Adin", "jenis": "komisi",
+                "dasar": "nominal", "nominal": "1800000"}])
+    await ps.approve_sheet(
+        db, company_id=c.id, user_id=None, sheet_id=s.id,
+        on_date=date(2026, 3, 5))
+    await db.commit()
+
+    await payment_service.receive_payment(
+        db, company_id=c.id, user_id=None, invoice_id=inv.id,
+        on_date=date(2026, 3, 5), amount=D("200000000"))
+    await payment_service.receive_payment(
+        db, company_id=c.id, user_id=None, invoice_id=inv.id,
+        on_date=date(2026, 3, 12), amount=D("150000000"))
+    await db.commit()
+
+    assert await _jurnal_timpang(db) == 0
+
+    dasar = (await db.execute(
+        select(Payout.dasar).where(Payout.company_id == c.id,
+                                   Payout.jenis == "insentif"))).scalars().all()
+    total = sum((D(str(x)) for x in dasar), D("0"))
+    assert total == D("348200000.00")
+
+    # Cicilan pertama memakai nilai sebenarnya 198.971.428,571428... yang
+    # dibulatkan SEKALI saat disimpan; cicilan pelunas menyerap sisanya.
+    assert sorted(D(str(x)) for x in dasar) == [
+        D("149228571.43"), D("198971428.57")]
+
+    # 4,3% x 348.200.000 = 14.972.600 tepat.
+    assert await _saldo(db, c.id, "6-1400") == D("14972600.00")
